@@ -1,0 +1,22 @@
+# --- 業務メモを絶対にコミットしないための保険 ---
+# Markdown / テキストは既定で除外し、README だけ例外にする
+*.md
+!README.md
+*.txt
+*.markdown
+*.log
+*.csv
+
+# 書き出した HTML（プレビューの「HTML保存」で作られるもの）
+*.export.html
+memo.html
+
+# エディタ / OS が作るゴミ
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+Desktop.ini
+*.swp
+*~
+.DS_Store
