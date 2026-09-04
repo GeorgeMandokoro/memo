@@ -1,0 +1,1639 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>memo</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1f2328; --side:#f7f8fa; --bar:#fbfcfd; --line:#e3e6ea;
+  --acc:#2f6feb; --mut:#70757c; --hover:#eceff3; --sel:rgba(47,111,235,.22);
+  --hl:rgba(255,214,0,.55); --hlcur:rgba(255,138,0,.75);
+  --htint:rgba(47,111,235,.07); --quote:rgba(120,130,145,.10); --code:rgba(120,130,145,.09);
+  --warn:#fff6d5; --warnfg:#5a4600; --strike:rgba(31,35,40,.62);
+  --fs:13px; --lh:1.75;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme=light]){
+  --bg:#1e2127; --fg:#d5d9e0; --side:#191c21; --bar:#1b1e24; --line:#2c313a;
+  --acc:#6fa8ff; --mut:#8b93a1; --hover:#252a32; --sel:rgba(111,168,255,.25);
+  --hl:rgba(255,214,0,.35); --hlcur:rgba(255,138,0,.55);
+  --htint:rgba(111,168,255,.10); --quote:rgba(140,150,165,.10); --code:rgba(140,150,165,.09);
+  --warn:#3a3416; --warnfg:#f0e2a8; --strike:rgba(213,217,224,.60);
+}}
+:root[data-theme=dark]{
+  --bg:#1e2127; --fg:#d5d9e0; --side:#191c21; --bar:#1b1e24; --line:#2c313a;
+  --acc:#6fa8ff; --mut:#8b93a1; --hover:#252a32; --sel:rgba(111,168,255,.25);
+  --hl:rgba(255,214,0,.35); --hlcur:rgba(255,138,0,.55);
+  --htint:rgba(111,168,255,.10); --quote:rgba(140,150,165,.10); --code:rgba(140,150,165,.09);
+  --warn:#3a3416; --warnfg:#f0e2a8; --strike:rgba(213,217,224,.60);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  display:flex;flex-direction:column;background:var(--bg);color:var(--fg);
+  font:13px/1.5 "Yu Gothic UI","Meiryo UI","Segoe UI",system-ui,sans-serif;
+  overflow:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+
+/* ---------- toolbar ---------- */
+#toolbar{
+  display:flex;align-items:center;gap:6px;padding:5px 8px;
+  background:var(--bar);border-bottom:1px solid var(--line);flex:0 0 auto;
+}
+.tb{padding:4px 9px;border-radius:5px;white-space:nowrap}
+.tb:hover{background:var(--hover)}
+.tb.icon{padding:4px 7px;font-size:14px;line-height:1}
+#fname{
+  margin-left:4px;font-weight:600;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;min-width:0;flex:1;
+}
+#fname .dot{color:var(--acc)}
+.sep{width:1px;height:18px;background:var(--line);margin:0 2px;flex:0 0 auto}
+
+/* ---------- layout ---------- */
+#app{flex:1;display:flex;min-height:0}
+#sidebar{
+  width:270px;flex:0 0 auto;min-width:0;display:flex;flex-direction:column;
+  background:var(--side);border-right:1px solid var(--line);
+}
+#sidebar.hidden,#sidebar.hidden + #splitter{display:none}
+#sideHead{
+  display:flex;align-items:center;gap:4px;padding:6px 6px 6px 10px;
+  border-bottom:1px solid var(--line);
+}
+.stab{
+  font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mut);
+  padding:3px 7px;border-radius:5px;white-space:nowrap;
+}
+.stab:hover{background:var(--hover)}
+.stab.on{color:var(--acc);background:var(--htint)}
+.stab .n{font-weight:400;opacity:.75}
+/* TODO タブ表示中はアウトライン用の操作を隠す */
+#todoList{flex:1;overflow:auto;padding:4px 0 20px;display:none}
+body.todo #outline{display:none}
+body.todo #todoList{display:block}
+body.todo #levels,body.todo #bFold{display:none}
+.tg{
+  padding:8px 8px 2px 10px;font-size:10.5px;font-weight:700;color:var(--mut);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ti{
+  display:flex;gap:5px;padding:2px 8px 2px 12px;cursor:pointer;
+  border-left:2px solid transparent;
+}
+.ti:hover{background:var(--hover)}
+.ti .tc{flex:0 0 auto;color:var(--mut);font-size:11px}
+.ti .tx{
+  flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#levels{display:flex;gap:1px}
+#levels button{width:18px;height:18px;border-radius:4px;font-size:10px;color:var(--mut)}
+#levels button:hover{background:var(--hover)}
+#levels button.on{background:var(--acc);color:#fff}
+#outline{flex:1;overflow:auto;padding:4px 0 20px}
+.oi{
+  display:flex;align-items:center;gap:2px;padding:2px 8px 2px 0;cursor:pointer;
+  border-left:2px solid transparent;
+}
+.oi:hover{background:var(--hover)}
+.oi.cur{background:var(--htint);border-left-color:var(--acc)}
+.oi.cur .tx{color:var(--acc);font-weight:600}
+.oi .tw{width:14px;flex:0 0 auto;text-align:center;color:var(--mut);font-size:9px;user-select:none}
+.oi .tw:hover{color:var(--fg)}
+.oi .tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.oi[data-l="1"] .tx{font-size:13.5px;font-weight:700}
+.oi[data-l="2"] .tx{font-size:13px;font-weight:600}
+.oi[data-l="3"] .tx{font-size:12.5px}
+.oi[data-l="4"] .tx,.oi[data-l="5"] .tx,.oi[data-l="6"] .tx{font-size:12px;color:var(--mut)}
+.oi.cur[data-l="4"] .tx,.oi.cur[data-l="5"] .tx,.oi.cur[data-l="6"] .tx{color:var(--acc)}
+#empty{padding:14px 12px;color:var(--mut);font-size:11.5px;line-height:1.8}
+#splitter{width:6px;margin:0 -3px;cursor:col-resize;flex:0 0 auto;z-index:6;background:transparent}
+#splitter:hover,#splitter.drag{background:var(--acc);opacity:.35}
+
+/* ---------- editor ---------- */
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+#wrap{flex:1;min-height:0;overflow:hidden;display:flex}
+#edArea{position:relative;flex:1;min-width:0;height:100%}
+#ed,#mirror{
+  position:absolute;top:0;left:0;width:100%;height:100%;margin:0;border:0;
+  padding:12px 18px 40vh 18px;
+  font-family:Consolas,"BIZ UDGothic","Yu Gothic","Meiryo",monospace;
+  font-size:var(--fs);line-height:var(--lh);
+  white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;tab-size:4;
+}
+#ed{z-index:2;background:transparent;color:var(--fg);resize:none;outline:none;overflow:auto}
+#ed::selection{background:var(--sel)}
+#mirror{z-index:1;color:transparent;overflow:hidden;pointer-events:none;user-select:none}
+#mirror .ln{margin:0 -18px;padding:0 18px}
+#mirror .hd{background:var(--htint);box-shadow:inset 3px 0 0 var(--acc)}
+#mirror .bq{background:var(--quote);box-shadow:inset 3px 0 0 var(--mut)}
+#mirror .cd{background:var(--code)}
+#mirror span.dn{                    /* 完了したタスク（字下げを除いた本文） */
+  text-decoration:line-through;
+  text-decoration-color:var(--strike);
+  text-decoration-thickness:1.5px;
+}
+#mirror mark{background:var(--hl);color:transparent;border-radius:2px}
+#mirror mark.cur{background:var(--hlcur)}
+
+/* ---------- preview ---------- */
+#pvSplit{width:6px;cursor:col-resize;flex:0 0 auto;background:transparent;display:none}
+#pvSplit:hover,#pvSplit.drag{background:var(--acc);opacity:.35}
+#preview{
+  width:44%;flex:0 0 auto;min-width:0;display:none;flex-direction:column;
+  border-left:1px solid var(--line);background:var(--bg);
+}
+body.pvon #preview{display:flex}
+body.pvon #pvSplit{display:block}
+#pvHead{
+  display:flex;align-items:center;gap:2px;padding:4px 6px 4px 12px;flex:0 0 auto;
+  border-bottom:1px solid var(--line);background:var(--bar);
+  font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--mut);
+}
+#pvHead .tb{font-size:11px;padding:3px 7px}
+#pvBody{flex:1;overflow:auto;padding:14px 20px 40vh}
+
+/* ---------- find ---------- */
+#find{
+  display:none;align-items:center;gap:4px;padding:5px 8px;
+  background:var(--bar);border-bottom:1px solid var(--line);flex:0 0 auto;flex-wrap:wrap;
+}
+#find.on{display:flex}
+#find input{
+  font:inherit;padding:3px 7px;border:1px solid var(--line);border-radius:5px;
+  background:var(--bg);color:var(--fg);width:210px;
+}
+#find input:focus{outline:none;border-color:var(--acc)}
+#find .tg{width:24px;height:24px;border-radius:5px;color:var(--mut);font-size:11px}
+#find .tg:hover{background:var(--hover)}
+#find .tg.on{background:var(--acc);color:#fff}
+#find .nav{width:24px;height:24px;border-radius:5px;font-size:12px}
+#find .nav:hover{background:var(--hover)}
+#cnt{color:var(--mut);min-width:92px;font-size:11.5px}
+#cnt.err{color:#e5534b}
+#rep{display:none;align-items:center;gap:4px}
+#rep.on{display:flex}
+#find .btn{padding:3px 8px;border:1px solid var(--line);border-radius:5px}
+#find .btn:hover{background:var(--hover)}
+
+/* ---------- status ---------- */
+#status{
+  display:flex;align-items:center;gap:12px;padding:3px 10px;flex:0 0 auto;
+  background:var(--bar);border-top:1px solid var(--line);color:var(--mut);font-size:11.5px;
+}
+#status .sp{flex:1}
+#status b{font-weight:600;color:var(--fg)}
+#status .stbtn{font:inherit;color:var(--mut);padding:1px 7px;border-radius:4px;white-space:nowrap}
+#status .stbtn:hover{background:var(--hover)}
+#status .stbtn.on{color:var(--acc);font-weight:600}
+
+/* ---------- misc ---------- */
+#drop{
+  position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+  background:rgba(47,111,235,.12);border:3px dashed var(--acc);
+  font-size:18px;font-weight:700;color:var(--acc);
+}
+#drop.on{display:flex}
+#drop{pointer-events:none}
+#toast{
+  position:fixed;right:14px;bottom:32px;z-index:60;padding:8px 14px;border-radius:7px;
+  background:var(--fg);color:var(--bg);opacity:0;transition:opacity .2s;pointer-events:none;
+}
+#toast.on{opacity:.92}
+.bar{
+  display:none;align-items:center;gap:10px;padding:6px 10px;flex:0 0 auto;
+  border-bottom:1px solid var(--line);
+}
+.bar.on{display:flex}
+.bar .btn{padding:3px 10px;border:1px solid rgba(128,128,128,.4);border-radius:5px}
+.bar .btn:hover{background:rgba(128,128,128,.15)}
+#restore{background:var(--warn);color:var(--warnfg)}
+dialog{
+  border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);
+  padding:18px 22px;max-width:560px;box-shadow:0 10px 40px rgba(0,0,0,.25);
+}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog h3{margin:0 0 10px;font-size:14px}
+dialog table{border-collapse:collapse;font-size:12.5px}
+dialog td{padding:3px 12px 3px 0;vertical-align:top;white-space:nowrap}
+dialog kbd{
+  font-family:Consolas,monospace;font-size:11.5px;background:var(--hover);
+  border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;
+}
+dialog .note{margin-top:14px;color:var(--mut);font-size:11.5px;line-height:1.8}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button class="tb" id="bOpen" title="ファイルを開く (Ctrl+O)">開く</button>
+  <button class="tb" id="bSave" title="上書き保存 (Ctrl+S)">保存</button>
+  <button class="tb" id="bSaveAs" title="名前を付けて保存 (Ctrl+Shift+S)">別名で保存</button>
+  <button class="tb" id="bNew" title="新規 (Ctrl+Alt+N)">新規</button>
+  <button class="tb" id="bToday" title="今日の日付見出しを挿入 / 移動 (F2)">今日</button>
+  <div class="sep"></div>
+  <button class="tb icon" id="bSide" title="サイドバー表示切替 (Ctrl+B)">&#9776;</button>
+  <button class="tb icon" id="bPv" title="プレビュー (Ctrl+P)">&#9707;</button>
+  <button class="tb icon" id="bFind" title="検索 (Ctrl+F)">&#128269;</button>
+  <span id="fname"></span>
+  <button class="tb icon" id="bTheme" title="テーマ切替">&#9681;</button>
+  <button class="tb icon" id="bHelp" title="ショートカット一覧 (F1)">?</button>
+</div>
+
+<div id="restore" class="bar">
+  <span id="restoreMsg"></span>
+  <button class="btn" id="bRestore">復元する</button>
+  <button class="btn" id="bDiscard">破棄</button>
+</div>
+
+
+<div id="app">
+  <aside id="sidebar">
+    <div id="sideHead">
+      <button class="stab on" id="tabOutline" title="見出し一覧">アウトライン</button>
+      <button class="stab" id="tabTodo" title="未完了タスク一覧">TODO</button>
+      <span style="flex:1"></span>
+      <div id="levels" title="表示する見出しレベル"></div>
+      <button class="tb icon" id="bFold" title="すべて折り畳む / 展開">&#177;</button>
+    </div>
+    <div id="outline"></div>
+    <div id="todoList"></div>
+  </aside>
+  <div id="splitter"></div>
+
+  <main>
+    <div id="find">
+      <input id="q" placeholder="検索..." spellcheck="false" autocomplete="off">
+      <button class="tg" id="tCase" title="大文字小文字を区別">Aa</button>
+      <button class="tg" id="tRe" title="正規表現">.*</button>
+      <button class="nav" id="bPrev" title="前へ (Shift+Enter)">&#9650;</button>
+      <button class="nav" id="bNext" title="次へ (Enter / F3)">&#9660;</button>
+      <span id="cnt"></span>
+      <button class="tg" id="tRep" title="置換 (Ctrl+H)">&#8644;</button>
+      <span id="rep">
+        <input id="r" placeholder="置換後..." spellcheck="false" autocomplete="off">
+        <button class="btn" id="bRep">置換</button>
+        <button class="btn" id="bRepAll">すべて</button>
+      </span>
+      <span style="flex:1"></span>
+      <button class="nav" id="bFindClose" title="閉じる (Esc)">&#10005;</button>
+    </div>
+
+    <div id="wrap">
+      <div id="edArea">
+        <div id="mirror" aria-hidden="true"></div>
+        <textarea id="ed" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      </div>
+      <div id="pvSplit"></div>
+      <aside id="preview">
+        <div id="pvHead">
+          <span>プレビュー</span>
+          <span style="flex:1"></span>
+          <button class="tb" id="bPvWin" title="別ウィンドウで開く">別ウィンドウ</button>
+          <button class="tb" id="bPvSave" title="HTML ファイルとして書き出す">HTML保存</button>
+          <button class="tb icon" id="bPvClose" title="閉じる (Ctrl+P)">&#10005;</button>
+        </div>
+        <div id="pvBody" class="md"></div>
+      </aside>
+    </div>
+
+    <div id="status">
+      <span id="stPos"></span>
+      <span id="stCount"></span>
+      <span id="stTask"></span>
+      <span id="stHead"></span>
+      <span class="sp"></span>
+      <button id="bAuto" class="stbtn" title="クリックで自動保存を切り替え"></button>
+      <span id="stFile"></span>
+    </div>
+  </main>
+</div>
+
+<div id="drop">ドロップして開く</div>
+<div id="toast"></div>
+<input type="file" id="fi" hidden accept=".txt,.md,.markdown,.mdown,.log,.csv,.json,.yml,.yaml,text/*">
+
+<dialog id="help">
+  <h3>キーボードショートカット</h3>
+  <table>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>上書き保存</td>
+        <td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>検索</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>名前を付けて保存</td>
+        <td><kbd>Enter</kbd> / <kbd>F3</kbd></td><td>次を検索</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>ファイルを開く</td>
+        <td><kbd>Shift</kbd>+<kbd>Enter</kbd></td><td>前を検索</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd></td><td>新規</td>
+        <td><kbd>Ctrl</kbd>+<kbd>H</kbd></td><td>置換</td></tr>
+    <tr><td><kbd>F2</kbd></td><td>今日の日付見出し</td>
+        <td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></td><td>同上（別キー）</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>サイドバー表示切替</td>
+        <td><kbd>Esc</kbd></td><td>検索を閉じる</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>プレビュー表示切替</td>
+        <td></td><td></td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd>..<kbd>6</kbd></td><td>見出しレベル絞込</td>
+        <td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>箇条書きのレベル変更</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>見出しレベル全表示</td>
+        <td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd></td><td>文字サイズ</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>&#8593;</kbd> / <kbd>&#8595;</kbd></td><td>前 / 次の見出しへ</td>
+        <td><kbd>F1</kbd></td><td>このヘルプ</td></tr>
+    <tr><td colspan="4" style="padding-top:10px"></td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>;</kbd></td><td>日付を挿入 (2026/09/03)</td>
+        <td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>[ ] → [x] → なし を切替</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>:</kbd></td><td>時刻を挿入 (14:23)</td>
+        <td>[ ] をダブルクリック</td><td>その場でチェック切替</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>;</kbd></td><td>日付＋時刻</td>
+        <td><kbd>Enter</kbd></td><td>タスク行は次も [ ] で継続</td></tr>
+  </table>
+  <div class="note">
+    <b>自動保存</b>：ファイルを開いていれば、入力が止まって 3 秒後（打ち続けても 30 秒に 1 回）に
+    そのファイルへ静かに上書きします。ダイアログは出ません。
+    右下の「自動保存」をクリックすると切り替えられます。<br>
+    保存は UTF-8。読み込み時は UTF-8 / Shift_JIS と改行コード (CRLF / LF / CR) を自動判別し、
+    改行コードは元のまま保存します。<br>
+    ファイルへの直接上書きは Chrome / Edge のみ対応。その他のブラウザではダウンロード保存になります。<br>
+    未保存の内容は自動でブラウザ内に控えを取り、起動時に復元できます。
+  </div>
+</dialog>
+
+<script>
+"use strict";
+const $ = s => document.getElementById(s);
+const ed = $("ed"), mirror = $("mirror"), outlineEl = $("outline");
+
+/* ================= state ================= */
+let text = "", lines = [""], starts = [0], lineTops = [0], padTop = 12;
+let outline = [];               // {level, text, line}
+let matches = [], curMatch = -1;
+let collapsed = new Set(), maxLevel = 6;
+let fileHandle = null, fileName = "untitled.md";
+let dirty = false, eol = "\n", enc = "UTF-8", hasBOM = false;
+let curHead = -1, task = { todo: 0, done: 0 }, tasks = [];
+
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem("memo." + k); return v === null ? d : JSON.parse(v);}catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("memo." + k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem("memo." + k); }catch(e){} }
+};
+const esc = s => s.replace(/[&<>]/g, c => c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;");
+
+/* ================= document model ================= */
+function syncDoc(){
+  text = ed.value;
+  lines = text.split("\n");
+  starts = new Array(lines.length);
+  let p = 0;
+  for (let i = 0; i < lines.length; i++){ starts[i] = p; p += lines[i].length + 1; }
+}
+function lineOf(pos){
+  let lo = 0, hi = lines.length - 1;
+  while (lo < hi){ const m = (lo + hi + 1) >> 1; if (starts[m] <= pos) lo = m; else hi = m - 1; }
+  return lo;
+}
+
+/* ================= outline ================= */
+function buildOutline(){
+  outline = [];
+  let fence = null;
+  for (let i = 0; i < lines.length; i++){
+    const l = lines[i];
+    const fm = l.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fm){
+      if (!fence) fence = fm[1][0];
+      else if (l.trimStart()[0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const m = l.match(/^(#{1,6})[ \t　]+(.*)$/) || l.match(/^(#{1,6})[ \t　]*$/);
+    if (m){
+      const t = (m[2] || "").replace(/[ \t　]+#+[ \t　]*$/, "").trim();
+      outline.push({ level: m[1].length, text: t || "(無題)", line: i });
+      continue;
+    }
+    // Setext 見出し (=== / ---)
+    if (i > 0 && /^ {0,3}(={2,}|-{2,})\s*$/.test(l)){
+      const prev = lines[i - 1];
+      if (prev.trim() && !/^ {0,3}#/.test(prev) && !/^\s*([-*+]|\d+[.)])\s/.test(prev) && !/^ {0,3}(={2,}|-{2,})\s*$/.test(prev))
+        outline.push({ level: l.trim()[0] === "=" ? 1 : 2, text: prev.trim(), line: i - 1 });
+    }
+  }
+}
+const hkey = h => h.level + "|" + h.text;
+
+function renderOutline(){
+  outlineEl.innerHTML = "";
+  if (!outline.length){
+    outlineEl.innerHTML = '<div id="empty">見出しがありません。<br>' +
+      '<code># タイトル</code> のように行頭に <code>#</code> を付けると<br>ここに一覧が出ます。</div>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  let skip = Infinity;
+  for (let i = 0; i < outline.length; i++){
+    const h = outline[i];
+    if (h.level > skip) continue;
+    skip = Infinity;
+    if (h.level > maxLevel) continue;
+    const isCol = collapsed.has(hkey(h));
+    const nx = outline[i + 1];
+    const kids = !!(nx && nx.level > h.level && nx.level <= maxLevel);
+
+    const el = document.createElement("div");
+    el.className = "oi" + (i === curHead ? " cur" : "");
+    el.dataset.l = h.level; el.dataset.i = i;
+    el.title = h.text + "  (" + (h.line + 1) + "行目)";
+    el.style.paddingLeft = (4 + (h.level - 1) * 11) + "px";
+    el.innerHTML = '<span class="tw">' + (kids ? (isCol ? "&#9654;" : "&#9660;") : "") + '</span>' +
+                   '<span class="tx"></span>';
+    el.lastChild.textContent = h.text;
+    frag.appendChild(el);
+    if (isCol) skip = h.level;
+  }
+  outlineEl.appendChild(frag);
+}
+
+/* 表示中の見出しを判定（キャレットが画面内ならキャレット優先、外なら画面最上行） */
+function lineAtY(y){
+  let lo = 0, hi = lineTops.length - 1;
+  while (lo < hi){ const m = (lo + hi + 1) >> 1; if (lineTops[m] - padTop <= y) lo = m; else hi = m - 1; }
+  return lo;
+}
+function updateCurrent(){
+  if (!outline.length){ if (curHead !== -1){ curHead = -1; } setHeadStatus(); return; }
+  const top = lineAtY(ed.scrollTop + 1);
+  const bottom = lineAtY(ed.scrollTop + ed.clientHeight - 4);
+  const caret = lineOf(ed.selectionStart);
+  const target = (caret >= top && caret <= bottom) ? caret : top;
+  let idx = -1;
+  for (let i = 0; i < outline.length; i++){ if (outline[i].line <= target) idx = i; else break; }
+  if (idx === curHead){ return; }
+  curHead = idx;
+  const prev = outlineEl.querySelector(".oi.cur");
+  if (prev) prev.classList.remove("cur");
+  const el = outlineEl.querySelector('.oi[data-i="' + idx + '"]');
+  if (el){ el.classList.add("cur"); el.scrollIntoView({ block: "nearest" }); }
+  setHeadStatus();
+}
+function setHeadStatus(){
+  $("stHead").textContent = curHead >= 0 ? "▸ " + outline[curHead].text.slice(0, 40) : "";
+}
+
+/* ================= mirror (行位置測定 + 検索ハイライト) ================= */
+function marksByLine(){
+  const map = new Map();
+  for (let k = 0; k < matches.length; k++){
+    const m = matches[k];
+    let li = lineOf(m.s), s = m.s;
+    while (s < m.e && li < lines.length){
+      const ls = starts[li], le = ls + lines[li].length;
+      const seg = { s: s - ls, e: Math.min(m.e, le) - ls, cur: k === curMatch };
+      if (seg.e > seg.s){
+        let a = map.get(li); if (!a){ a = []; map.set(li, a); }
+        a.push(seg);
+      }
+      s = le + 1; li++;
+    }
+  }
+  return map;
+}
+/* 行の [from,to) を、検索ハイライトを保ったまま HTML にする */
+function segHTML(l, from, to, segs){
+  let s = "", pos = from;
+  if (segs) for (const g of segs){
+    const a = Math.max(g.s, from), b = Math.min(g.e, to);
+    if (b <= a) continue;
+    if (a > pos) s += esc(l.slice(pos, a));
+    s += '<mark' + (g.cur ? ' class="cur"' : '') + '>' + esc(l.slice(a, b)) + "</mark>";
+    pos = b;
+  }
+  return s + esc(l.slice(pos, to));
+}
+const doneRe = /^[ \t　]*(?:✅|☑|(?:[-*+]|\d+[.)])[ \t]+\[[xX]\])/;
+function lineClass(l){
+  if (/^ {0,3}#{1,6}([ \t　]|$)/.test(l)) return " hd";
+  if (doneRe.test(l)) return " tk";   /* 見た目は付けない。コード行と誤判定させないための印 */
+  if (/^ {0,3}>/.test(l)) return " bq";
+  if (/^(\t| {4,})\S/.test(l) || /^ {0,3}(```|~~~)/.test(l)) return " cd";
+  return "";
+}
+function renderMirror(){
+  const cs = getComputedStyle(ed);
+  padTop = parseFloat(cs.paddingTop) || 0;
+  mirror.style.width = ed.clientWidth + "px";
+  const mk = matches.length ? marksByLine() : null;
+  const out = new Array(lines.length);
+  for (let i = 0; i < lines.length; i++){
+    const l = lines[i];
+    const segs = mk && mk.get(i);
+    let body;
+    if (doneRe.test(l)){
+      // 取り消し線は行頭の字下げには掛けない（本文だけを span で包む）
+      const ind = l.length - l.replace(/^[ \t　]*/, "").length;
+      body = segHTML(l, 0, ind, segs) +
+             '<span class="dn">' + segHTML(l, ind, l.length, segs) + "</span>";
+    } else {
+      body = segHTML(l, 0, l.length, segs);
+    }
+    out[i] = '<div class="ln' + lineClass(l) + '">' + (body || "<br>") + "</div>";
+  }
+  mirror.innerHTML = out.join("");
+  const ch = mirror.children;
+  lineTops = new Array(ch.length);
+  for (let i = 0; i < ch.length; i++) lineTops[i] = ch[i].offsetTop;
+  mirror.scrollTop = ed.scrollTop;
+}
+
+/* ================= status / title ================= */
+/* 未完了タスクを集めつつ、完了数も同じ 1 パスで数える。
+   コードブロック内は対象外。直前の見出しを見出しごとの区切りに使う。 */
+const TASK_RE = /^[ \t　]*(?:(?:[-*+]|\d+[.)])[ \t]+\[([ xX])\][ \t]*|([□✅☑])[ \t]*)(.*)$/;
+function buildTasks(){
+  tasks = [];
+  let done = 0, fence = null, head = "";
+  for (let i = 0; i < lines.length; i++){
+    const l = lines[i];
+    const fm = l.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fm){
+      if (!fence) fence = fm[1][0];
+      else if (l.trimStart()[0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const hm = l.match(/^ {0,3}#{1,6}[ \t　]+(.*)$/);
+    if (hm){ head = hm[1].replace(/[ \t　]+#+[ \t　]*$/, "").trim(); continue; }
+    const m = l.match(TASK_RE);
+    if (!m) continue;
+    if (m[1] ? m[1] !== " " : m[2] !== "□"){ done++; continue; }
+    if (m[3].trim()) tasks.push({ line: i, text: m[3].trim(), head: head });
+  }
+  task = { todo: tasks.length, done: done };
+}
+function renderTasks(){
+  const box = $("todoList");
+  box.innerHTML = "";
+  $("tabTodo").innerHTML = 'TODO <span class="n">' + tasks.length + "</span>";
+  if (!tasks.length){
+    box.innerHTML = '<div id="empty">未完了のタスクはありません。<br>' +
+      '<code>- [ ] やること</code> と書くとここに集まります。</div>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  let cur = null;
+  for (const t of tasks){
+    if (t.head !== cur){
+      cur = t.head;
+      const g = document.createElement("div");
+      g.className = "tg";
+      g.textContent = cur || "(見出しなし)";
+      g.title = g.textContent;
+      frag.appendChild(g);
+    }
+    const el = document.createElement("div");
+    el.className = "ti";
+    el.dataset.line = t.line;
+    el.title = t.text + "  (" + (t.line + 1) + "行目)";
+    const c = document.createElement("span");
+    c.className = "tc"; c.textContent = "□";
+    const x = document.createElement("span");
+    x.className = "tx"; x.textContent = t.text;
+    el.appendChild(c); el.appendChild(x);
+    frag.appendChild(el);
+  }
+  box.appendChild(frag);
+}
+function setTab(t){
+  const todo = t === "todo";
+  document.body.classList.toggle("todo", todo);
+  $("tabOutline").classList.toggle("on", !todo);
+  $("tabTodo").classList.toggle("on", todo);
+  LS.set("tab", todo ? "todo" : "outline");
+  if (todo) renderTasks();
+}
+function updateStatus(){
+  if (text !== ed.value) syncDoc();
+  const p = ed.selectionStart, li = lineOf(p);
+  const selLen = ed.selectionEnd - ed.selectionStart;
+  $("stPos").innerHTML = "行 <b>" + (li + 1) + "</b> / 列 <b>" + (p - starts[li] + 1) + "</b>" +
+    (selLen > 0 ? " (選択 " + selLen.toLocaleString() + ")" : "");
+  $("stCount").innerHTML = "<b>" + text.length.toLocaleString() + "</b> 文字 / <b>" +
+    lines.length.toLocaleString() + "</b> 行 / 見出し <b>" + outline.length + "</b>";
+  $("stTask").innerHTML = (task.todo + task.done)
+    ? "未 <b>" + task.todo + "</b> / 済 <b>" + task.done + "</b>" : "";
+  updateAutoStatus();
+  $("stFile").textContent = enc + (hasBOM ? " (BOM)" : "") + " · " +
+    (eol === "\r\n" ? "CRLF" : eol === "\r" ? "CR" : "LF");
+}
+function updateTitle(){
+  const el = $("fname");
+  el.textContent = "";
+  if (dirty){
+    const d = document.createElement("span");
+    d.className = "dot"; d.textContent = "● ";
+    el.appendChild(d);
+  }
+  el.appendChild(document.createTextNode(fileName));
+  document.title = (dirty ? "● " : "") + fileName + " – memo";
+}
+function setDirty(v){ if (dirty !== v){ dirty = v; updateTitle(); } }
+
+/* ================= 全体更新 ================= */
+let t1 = 0;
+function refreshPreview(){
+  clearTimeout(t5);
+  t5 = setTimeout(renderPreview, 180);   // 入力中のプレビュー更新は少し遅らせる
+}
+function refresh(){
+  syncDoc(); buildOutline(); buildTasks(); runSearch(false); renderMirror(); refreshPreview();
+  renderOutline();
+  if (document.body.classList.contains("todo")) renderTasks();
+  else $("tabTodo").innerHTML = 'TODO <span class="n">' + tasks.length + "</span>";
+  curHead = -2; updateCurrent(); updateStatus();
+}
+function onEdit(){
+  setDirty(true);
+  clearTimeout(t1);
+  t1 = setTimeout(() => { refresh(); backup(); scheduleAutoSave(); }, 90);
+}
+
+/* ================= 検索 ================= */
+const q = $("q"), rIn = $("r");
+let caseSens = false, useRegex = false;
+function runSearch(jump){
+  const prev = matches[curMatch];
+  matches = []; $("cnt").classList.remove("err");
+  const s = q.value;
+  if (s && $("find").classList.contains("on")){
+    try{
+      if (useRegex){
+        const re = new RegExp(s, "g" + (caseSens ? "" : "i"));
+        let m;
+        while ((m = re.exec(text))){
+          if (m[0] === ""){ re.lastIndex++; continue; }
+          matches.push({ s: m.index, e: m.index + m[0].length });
+          if (matches.length > 10000) break;
+        }
+      } else {
+        const hay = caseSens ? text : text.toLowerCase();
+        const nd = caseSens ? s : s.toLowerCase();
+        let i = 0;
+        while ((i = hay.indexOf(nd, i)) > -1){
+          matches.push({ s: i, e: i + nd.length });
+          i += nd.length;
+          if (matches.length > 20000) break;
+        }
+      }
+    }catch(err){ $("cnt").classList.add("err"); $("cnt").textContent = "正規表現エラー"; return; }
+  }
+  if (!matches.length){ curMatch = -1; }
+  else if (jump){
+    const from = ed.selectionStart;
+    curMatch = matches.findIndex(m => m.s >= from);
+    if (curMatch < 0) curMatch = 0;
+  } else if (prev){
+    const i = matches.findIndex(m => m.s >= prev.s);
+    curMatch = i < 0 ? 0 : i;
+  } else curMatch = matches.length ? 0 : -1;
+  showCount();
+}
+function showCount(){
+  const c = $("cnt");
+  c.classList.remove("err");
+  c.textContent = !q.value ? "" : matches.length ? (curMatch + 1) + " / " + matches.length + " 件" : "見つかりません";
+}
+function gotoMatch(k){
+  if (!matches.length) return;
+  curMatch = (k + matches.length) % matches.length;
+  const m = matches[curMatch];
+  ed.setSelectionRange(m.s, m.e);
+  scrollToLine(lineOf(m.s), true);
+  renderMirror(); showCount(); updateStatus();
+}
+function openFind(rep){
+  const f = $("find");
+  const sel = ed.value.slice(ed.selectionStart, ed.selectionEnd);
+  f.classList.add("on");
+  if (rep) $("rep").classList.add("on"), $("tRep").classList.add("on");
+  if (sel && sel.length < 200 && !sel.includes("\n")) q.value = sel;
+  q.focus(); q.select();
+  syncDoc(); runSearch(true); renderMirror();
+  if (matches.length) gotoMatch(curMatch);
+}
+function closeFind(){
+  $("find").classList.remove("on");
+  matches = []; curMatch = -1;
+  renderMirror(); ed.focus();
+}
+
+/* ================= 編集ヘルパ（undo を壊さない） ================= */
+function replaceRange(s, e, str){
+  ed.focus(); ed.setSelectionRange(s, e);
+  let ok = false;
+  try{ ok = document.execCommand("insertText", false, str); }catch(err){}
+  if (!ok) ed.setRangeText(str, s, e, "end");
+  onEdit();
+}
+function doReplace(){
+  if (curMatch < 0 || !matches.length) return;
+  const m = matches[curMatch], k = curMatch;
+  replaceRange(m.s, m.e, rIn.value);
+  syncDoc(); runSearch(false);
+  curMatch = Math.min(k, matches.length - 1);
+  if (matches.length) gotoMatch(curMatch); else { renderMirror(); showCount(); }
+}
+function doReplaceAll(){
+  if (!matches.length) return;
+  const n = matches.length;
+  let out = "", pos = 0;
+  for (const m of matches){ out += text.slice(pos, m.s) + rIn.value; pos = m.e; }
+  out += text.slice(pos);
+  const sc = ed.scrollTop;
+  replaceRange(0, ed.value.length, out);
+  ed.scrollTop = sc;
+  syncDoc(); runSearch(false); renderMirror();
+  toast(n + " 件置換しました");
+}
+
+/* ================= Markdown → HTML ================= */
+const attr = s => esc(s).replace(/"/g, "&quot;");
+const safeUrl = u => /^(https?:|mailto:|#|\.{0,2}\/|[^:]*$)/i.test(u.trim());
+
+/* インライン記法。順番が大事（エスケープ → コード → リンク → 強調） */
+function inline(s){
+  const keep = [];
+  const hold = t => "\u0000" + (keep.push(t) - 1) + "\u0000";
+  s = esc(s);
+  s = s.replace(/\\([\\`*_{}\[\]()#+\-.!~>|])/g, (m, c) => hold(esc(c)));   // \* などの打ち消し
+  s = s.replace(/`([^`]+)`/g, (m, c) => hold("<code>" + c + "</code>"));
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, a, u) =>
+        safeUrl(u) ? hold('<img src="' + attr(u) + '" alt="' + attr(a) + '">') : m);
+  s = s.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (m, t, u) =>
+        safeUrl(u) ? '<a href="' + attr(u) + '" target="_blank" rel="noopener">' + t + "</a>" : m);
+  s = s.replace(/(^|[\s(（])(https?:\/\/[^\s<)）]+)/g, (m, p, u) =>
+        p + '<a href="' + attr(u) + '" target="_blank" rel="noopener">' + u + "</a>");
+  s = s.replace(/\*\*\*([^*\n]+)\*\*\*/g, "<strong><em>$1</em></strong>")
+       .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+       .replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+       .replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
+  return s.replace(/\u0000(\d+)\u0000/g, (m, i) => keep[+i]);
+}
+/* 箇条書き 1 行を解釈する（□ / ✅ 記法も項目として扱う） */
+function parseItem(l){
+  let m = l.match(/^([ \t　]*)([-*+]|\d+[.)])[ \t]+(.*)$/);
+  if (m){
+    const c = m[3].match(/^\[([ xX])\][ \t]*(.*)$/);
+    return { ind: indentWidth(m[1]), ordered: /\d/.test(m[2]),
+             checked: c ? c[1] !== " " : null, text: c ? c[2] : m[3] };
+  }
+  m = l.match(/^([ \t　]*)([□✅☑])[ \t]*(.*)$/);
+  if (m) return { ind: indentWidth(m[1]), ordered: false, checked: m[2] !== "□", text: m[3] };
+  return null;
+}
+function indentWidth(s){
+  let w = 0;
+  for (const c of s) w += c === "\t" ? 4 : c === "　" ? 2 : 1;
+  return w;
+}
+function isBlockStart(l){
+  return !l.trim() || /^ {0,3}#{1,6}([ \t　]|$)/.test(l) || /^ {0,3}(```|~~~)/.test(l) ||
+         /^ {0,3}>/.test(l) || /^ {0,3}([-*_])(\s*\1){2,}\s*$/.test(l) || !!parseItem(l);
+}
+function mdToHtml(src){
+  const L = src.replace(/\u0000/g, "").split("\n");
+  let html = "", i = 0;
+  const tag = (t, i0, body) => "<" + t + ' data-line="' + i0 + '">' + body + "</" + t + ">";
+  while (i < L.length){
+    const l = L[i], i0 = i;
+    if (!l.trim()){ i++; continue; }
+
+    let m = l.match(/^ {0,3}(```+|~~~+)(.*)$/);          // コードブロック
+    if (m){
+      const f = m[1][0], buf = [];
+      i++;
+      while (i < L.length && !new RegExp("^ {0,3}\\" + f + "{3,}\\s*$").test(L[i])) buf.push(L[i++]);
+      i++;
+      html += '<pre data-line="' + i0 + '"><code>' + esc(buf.join("\n")) + "</code></pre>";
+      continue;
+    }
+    m = l.match(/^ {0,3}(#{1,6})[ \t　]+(.*)$/) || l.match(/^ {0,3}(#{1,6})[ \t　]*$/);
+    if (m){                                              // 見出し
+      const lv = m[1].length;
+      html += tag("h" + lv, i0, inline((m[2] || "").replace(/[ \t　]+#+[ \t　]*$/, "")));
+      i++; continue;
+    }
+    if (/^ {0,3}([-*_])(\s*\1){2,}\s*$/.test(l)){        // 水平線
+      html += '<hr data-line="' + i0 + '">'; i++; continue;
+    }
+    if (/^ {0,3}>/.test(l)){                             // 引用
+      const buf = [];
+      while (i < L.length && /^ {0,3}>/.test(L[i])) buf.push(L[i++].replace(/^ {0,3}>[ \t]?/, ""));
+      html += '<blockquote data-line="' + i0 + '">' + mdToHtml(buf.join("\n")) + "</blockquote>";
+      continue;
+    }
+    if (l.includes("|") && i + 1 < L.length && /^[\s|:-]*-[\s|:-]*$/.test(L[i + 1]) && L[i + 1].includes("|")){
+      const cells = r => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(c => c.trim());
+      let h = '<table data-line="' + i0 + '"><thead><tr>';
+      cells(l).forEach(c => h += "<th>" + inline(c) + "</th>");
+      h += "</tr></thead><tbody>";
+      i += 2;
+      while (i < L.length && L[i].includes("|") && L[i].trim()){
+        h += "<tr>";
+        cells(L[i++]).forEach(c => h += "<td>" + inline(c) + "</td>");
+        h += "</tr>";
+      }
+      html += h + "</tbody></table>";
+      continue;
+    }
+    if (parseItem(l)){                                   // 箇条書き / チェックリスト
+      const r = renderList(L, i);
+      html += r[0]; i = r[1]; continue;
+    }
+    if (i + 1 < L.length && /^ {0,3}(={2,}|-{2,})\s*$/.test(L[i + 1])){   // Setext 見出し
+      html += tag(L[i + 1].trim()[0] === "=" ? "h1" : "h2", i0, inline(l));
+      i += 2; continue;
+    }
+    const buf = [];                                      // 段落（1 行改行は <br>）
+    while (i < L.length && L[i].trim() && !isBlockStart(L[i])){
+      if (i > i0 && i + 1 < L.length && /^ {0,3}(={2,}|-{2,})\s*$/.test(L[i + 1])) break;
+      buf.push(inline(L[i++]));
+    }
+    if (!buf.length) buf.push(inline(L[i++]));
+    html += tag("p", i0, buf.join("<br>"));
+  }
+  return html;
+}
+function renderList(L, i){
+  const st = [];
+  let html = "", liOpen = false;
+  const close = s => (s.ordered ? "</ol>" : "</ul>");
+  while (i < L.length){
+    const it = parseItem(L[i]);
+    if (!it) break;
+    if (!st.length){
+      st.push({ ind: it.ind, ordered: it.ordered });
+      html += (it.ordered ? "<ol" : "<ul") + ' data-line="' + i + '">';
+    } else if (it.ind > st[st.length - 1].ind){
+      st.push({ ind: it.ind, ordered: it.ordered });
+      html += it.ordered ? "<ol>" : "<ul>";              // 直前の <li> の内側に入れ子にする
+      liOpen = false;
+    } else {
+      if (liOpen){ html += "</li>"; liOpen = false; }
+      while (st.length > 1 && it.ind < st[st.length - 1].ind) html += close(st.pop()) + "</li>";
+      const top = st[st.length - 1];
+      if (top.ordered !== it.ordered){
+        html += close(top) + (it.ordered ? "<ol>" : "<ul>");
+        st[st.length - 1] = { ind: top.ind, ordered: it.ordered };
+      }
+    }
+    html += '<li data-line="' + i + '"' + (it.checked !== null ? ' class="task"' : "") + ">";
+    if (it.checked !== null){
+      html += '<input type="checkbox" disabled' + (it.checked ? " checked" : "") + "> ";
+      html += it.checked ? '<span class="done">' + inline(it.text) + "</span>" : inline(it.text);
+    } else html += inline(it.text);
+    liOpen = true;
+    i++;
+  }
+  if (liOpen) html += "</li>";
+  while (st.length){
+    html += close(st.pop());
+    if (st.length) html += "</li>";      // 入れ子を閉じたら親項目も閉じる
+  }
+  return [html, i];
+}
+
+/* ================= プレビュー =================
+   本体ペインと別ウィンドウで同じ CSS を使い回す。別ウィンドウ側には
+   CSS 変数が無いので、var(--x, 既定色) のフォールバックで明るい配色になる。 */
+const PV_CSS = `
+.md{font-family:"Yu Gothic UI","Meiryo","Segoe UI",system-ui,sans-serif;font-size:14px;
+  line-height:1.85;color:var(--fg,#1f2328);background:var(--bg,#fff);overflow-wrap:break-word}
+.md>*:first-child{margin-top:0}
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{line-height:1.45;margin:1.5em 0 .5em;font-weight:700}
+.md h1{font-size:1.6em;border-bottom:1px solid var(--line,#e3e6ea);padding-bottom:.25em}
+.md h2{font-size:1.35em;border-bottom:1px solid var(--line,#e3e6ea);padding-bottom:.2em}
+.md h3{font-size:1.18em}
+.md h4{font-size:1.05em}
+.md h5,.md h6{font-size:1em;color:var(--mut,#70757c)}
+.md p{margin:.65em 0}
+.md ul,.md ol{margin:.4em 0;padding-left:1.6em}
+.md li{margin:.15em 0}
+.md li.task{list-style:none;margin-left:-1.35em}
+.md li.task input{margin-right:.4em}
+.md .done{text-decoration:line-through;text-decoration-color:var(--strike,rgba(31,35,40,.62));
+  text-decoration-thickness:1.5px}
+.md blockquote{margin:.7em 0;padding:.2em 0 .2em 1em;color:var(--mut,#70757c);
+  border-left:3px solid var(--line,#e3e6ea)}
+.md pre{margin:.8em 0;padding:.8em 1em;overflow-x:auto;border-radius:6px;background:rgba(128,128,128,.13)}
+.md code{font-family:Consolas,monospace;font-size:.9em;background:rgba(128,128,128,.16);
+  padding:.1em .35em;border-radius:4px}
+.md pre code{background:none;padding:0}
+.md a{color:var(--acc,#2f6feb)}
+.md hr{border:0;border-top:1px solid var(--line,#e3e6ea);margin:1.5em 0}
+.md table{border-collapse:collapse;margin:.8em 0}
+.md th,.md td{border:1px solid var(--line,#e3e6ea);padding:.35em .7em}
+.md th{background:rgba(128,128,128,.12)}
+.md img{max-width:100%}
+.md del{opacity:.6}
+`;
+let pvWin = null, t5 = 0;
+function previewOn(){ return document.body.classList.contains("pvon"); }
+function togglePreview(on){
+  const show = on === undefined ? !previewOn() : on;
+  document.body.classList.toggle("pvon", show);
+  LS.set("pv", show);
+  if (show) renderPreview();
+  requestAnimationFrame(renderMirror);
+}
+function renderPreview(){
+  if (!previewOn() && !(pvWin && !pvWin.closed)) return;
+  const html = mdToHtml(ed.value);
+  if (previewOn()) $("pvBody").innerHTML = html;
+  if (pvWin && !pvWin.closed){
+    const c = pvWin.document.getElementById("c");
+    if (c) c.innerHTML = html;
+  }
+  syncPreview();
+}
+function syncPreview(){
+  if (!previewOn()) return;
+  const box = $("pvBody");
+  const top = lineAtY(ed.scrollTop + 1);
+  let target = null;
+  for (const el of box.querySelectorAll("[data-line]")){
+    if (+el.dataset.line <= top) target = el; else break;
+  }
+  if (target) box.scrollTop = Math.max(0, target.offsetTop - box.offsetTop - 6);
+  else box.scrollTop = 0;
+}
+function openPvWindow(){
+  pvWin = window.open("", "memoPreview", "width=880,height=1000");
+  if (!pvWin){ toast("ポップアップがブロックされました"); return; }
+  pvWin.document.open();
+  pvWin.document.write('<!doctype html><html lang="ja"><head><meta charset="utf-8">' +
+    "<title>プレビュー – " + esc(fileName) + "</title><style>body{margin:0;padding:24px 32px}" +
+    PV_CSS + '</style></head><body><div id="c" class="md"></div></body></html>');
+  pvWin.document.close();
+  renderPreview();
+}
+function pvDocument(){
+  return '<!doctype html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n<title>' +
+    esc(fileName.replace(/\.[^.]+$/, "")) + "</title>\n<style>body{margin:0;padding:32px;" +
+    "max-width:920px;margin:0 auto}" + PV_CSS + '</style>\n</head>\n<body>\n<div class="md">\n' +
+    mdToHtml(ed.value) + "\n</div>\n</body>\n</html>\n";
+}
+async function savePvHtml(){
+  const name = fileName.replace(/\.[^.]+$/, "") + ".html";
+  const blob = new Blob([pvDocument()], { type: "text/html;charset=utf-8" });
+  if (window.showSaveFilePicker){
+    try{
+      const h = await window.showSaveFilePicker({ id: "memoHtml", suggestedName: name,
+        types: [{ description: "HTML", accept: { "text/html": [".html", ".htm"] } }] });
+      const w = await h.createWritable();
+      await w.write(blob); await w.close();
+      toast("書き出しました: " + h.name);
+    }catch(err){ if (err.name !== "AbortError") toast("失敗: " + err.message); }
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+}
+
+/* ================= 日付 / 時刻の挿入 ================= */
+const pad2 = n => (n < 10 ? "0" : "") + n;
+function nowStr(kind){
+  const d = new Date();
+  const date = d.getFullYear() + "/" + pad2(d.getMonth() + 1) + "/" + pad2(d.getDate());
+  const time = pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  return kind === "date" ? date : kind === "time" ? time : date + " " + time;
+}
+/* 検索欄など別の入力欄にいるときは本文を書き換えない */
+function editorTarget(){
+  const a = document.activeElement;
+  return a === ed || !(a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA"));
+}
+function insertNow(kind){
+  if (!editorTarget()) return;
+  replaceRange(ed.selectionStart, ed.selectionEnd, nowStr(kind));
+}
+
+/* 今日の日付見出し。1 日に何本でも作れるよう、押すたびに必ず新しく挿入する。 */
+const DATE_HEAD = "## ";
+function todayHeading(){
+  if (!editorTarget()) return;
+  syncDoc();
+  const date = nowStr("date");
+  const head = DATE_HEAD + date + " ";
+  const pos = starts[lineOf(ed.selectionStart)];   // カーソル行の先頭に差し込む
+  replaceRange(pos, pos, head + "\n\n");
+  const p = pos + head.length;                     // 日付の後ろで待つ（続けて表題を打てる）
+  ed.setSelectionRange(p, p);
+  toast("今日の見出しを追加しました: " + date);
+}
+
+/* ================= インデント ================= */
+const INDENT = "  ";                       // 1 レベル = 半角 2 つ
+const OUTDENT = /^(\t|　| {1,2})/;         // 戻すときは タブ / 全角空白 / 半角 1〜2 個
+/* 行頭が箇条書き記号なら、キャレット位置に関係なく行ごとレベル変更する */
+function isListLine(l){
+  return /^[ \t　]*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(l) || /^[ \t　]*[□✅☑]/.test(l);
+}
+
+/* ================= チェックボックス ================= */
+const BOX_TODO = "□", BOX_DONE = "✅";
+/* 1 行を なし → [ ] → [x] → なし と巡回させる */
+function cycleLine(l, allowEmpty){
+  const m = l.match(/^([ \t　]*)([\s\S]*)$/);
+  const ind = m[1], body = m[2];
+  // 1) すでにタスク : [ ] → [x] → チェックだけ外す
+  const md = body.match(/^([-*+]|\d+[.)])([ \t]+)\[([ xX])\][ \t]?/);
+  if (md){
+    if (md[3] === " ") return ind + body.replace(/\[[ xX]\]/, "[x]");
+    return ind + md[1] + md[2] + body.slice(md[0].length);
+  }
+  // 2) 既存ファイルの □ / ✅ 記法もそのまま扱える
+  if (body.startsWith(BOX_TODO)) return ind + BOX_DONE + body.slice(BOX_TODO.length);
+  if (body.startsWith(BOX_DONE)) return ind + body.slice(BOX_DONE.length);
+  // 3) 箇条書きなら記号の後ろにチェックを足す
+  const li = body.match(/^([-*+]|\d+[.)])[ \t]+/);
+  if (li) return ind + li[0] + "[ ] " + body.slice(li[0].length);
+  if (!body.trim() && !allowEmpty) return l;      // 複数行選択時、空行は触らない
+  return ind + "- [ ] " + body;
+}
+function toggleCheck(){
+  if (!editorTarget()) return;
+  syncDoc();
+  const s = ed.selectionStart, e2 = ed.selectionEnd;
+  const a = lineOf(s), b = lineOf(e2);
+  const from = starts[a], to = starts[b] + lines[b].length;
+  const src = ed.value.slice(from, to);
+  const one = a === b;
+  const block = src.split("\n").map(l => cycleLine(l, one)).join("\n");
+  if (block === src) return;
+  replaceRange(from, to, block);
+  if (one){
+    const p = Math.max(from, Math.min(from + block.length, s + block.length - src.length));
+    ed.setSelectionRange(p, p);
+  } else ed.setSelectionRange(from, from + block.length);
+}
+/* □ / ✅ をダブルクリックしたらその 1 文字だけ切り替える */
+function toggleCharAt(i){
+  const c = ed.value[i];
+  const to = c === BOX_TODO ? BOX_DONE : c === BOX_DONE ? BOX_TODO : c === " " ? "x" : " ";
+  const p = ed.selectionStart;
+  replaceRange(i, i + 1, to);
+  ed.setSelectionRange(p, p);
+}
+
+/* ================= スクロール ================= */
+function scrollToLine(li, center){
+  if (li >= lineTops.length) return;
+  const y = lineTops[li] - padTop;
+  const h = ed.clientHeight;
+  if (center) ed.scrollTop = Math.max(0, y - h * 0.32);
+  else if (y < ed.scrollTop + 8 || y > ed.scrollTop + h - 40) ed.scrollTop = Math.max(0, y - 8);
+  mirror.scrollTop = ed.scrollTop;
+}
+function jumpToLine(li){
+  if (li == null || li >= lines.length) return;
+  const pos = starts[li] + lines[li].length;
+  ed.focus();
+  ed.setSelectionRange(pos, pos);
+  ed.scrollTop = Math.max(0, lineTops[li] - padTop - 6);
+  mirror.scrollTop = ed.scrollTop;
+  curHead = -2; updateCurrent(); updateStatus(); syncPreview();
+}
+function jumpTo(i){
+  const h = outline[i]; if (!h) return;
+  jumpToLine(h.line);
+}
+function jumpHead(dir){
+  if (!outline.length) return;
+  const cl = lineOf(ed.selectionStart);
+  let t = -1;
+  if (dir < 0){ for (let i = outline.length - 1; i >= 0; i--) if (outline[i].line < cl){ t = i; break; } }
+  else { for (let i = 0; i < outline.length; i++) if (outline[i].line > cl){ t = i; break; } }
+  if (t >= 0) jumpTo(t);
+}
+
+/* ================= ファイル入出力 ================= */
+const EXT_TYPES = [{ description: "テキスト / Markdown",
+  accept: { "text/markdown": [".md", ".markdown", ".mdown"],
+            "text/plain": [".txt", ".log", ".csv", ".json", ".yml", ".yaml"] } }];
+
+async function decodeFile(file){
+  const buf = await file.arrayBuffer();
+  let u = new Uint8Array(buf), bom = false;
+  if (u[0] === 0xEF && u[1] === 0xBB && u[2] === 0xBF){ u = u.subarray(3); bom = true; }
+  let t, e = "UTF-8";
+  try{ t = new TextDecoder("utf-8", { fatal: true }).decode(u); }
+  catch(err){
+    try{ t = new TextDecoder("shift_jis").decode(u); e = "Shift_JIS"; }
+    catch(e2){ t = new TextDecoder("utf-8").decode(u); }
+  }
+  return { text: t, enc: e, bom: bom };
+}
+function normalize(t){
+  if (t.indexOf("\r\n") > -1) eol = "\r\n";
+  else if (t.indexOf("\r") > -1) eol = "\r";
+  else eol = "\n";
+  return t.replace(/\r\n?/g, "\n");
+}
+function setContent(t, name){
+  ed.value = normalize(t);
+  fileName = name || fileName;
+  collapsed.clear();
+  ed.scrollTop = 0; ed.setSelectionRange(0, 0);
+  setDirty(false); updateTitle(); refresh();
+}
+async function loadFile(file, handle){
+  if (!(await confirmDiscard())) return;
+  const d = await decodeFile(file);
+  enc = d.enc; hasBOM = d.bom;
+  fileHandle = handle || null;
+  lastSaved = 0;
+  setContent(d.text, file.name);
+  LS.del("backup");
+  toast("開きました: " + file.name);
+}
+async function loadHandle(h){
+  if (h.queryPermission){
+    let p = await h.queryPermission({ mode: "readwrite" });
+    if (p === "prompt") p = await h.requestPermission({ mode: "readwrite" });
+    // 権限が得られなくても読み取りだけは可能なのでそのまま開く（保存時に再度要求）
+  }
+  const f = await h.getFile();
+  await loadFile(f, h);
+}
+async function openFile(){
+  if (window.showOpenFilePicker){
+    try{
+      const [h] = await window.showOpenFilePicker({ id: "memo", types: EXT_TYPES, excludeAcceptAllOption: false });
+      await loadHandle(h);
+    }catch(err){ if (err.name !== "AbortError") toast("開けませんでした: " + err.message); }
+  } else $("fi").click();
+}
+function serialize(){
+  let t = ed.value;
+  if (eol !== "\n") t = t.replace(/\n/g, eol);
+  const bom = String.fromCharCode(0xFEFF);
+  return new Blob([hasBOM ? bom + t : t], { type: "text/plain;charset=utf-8" });
+}
+async function save(){
+  if (!fileHandle) return saveAs();
+  try{
+    if (fileHandle.queryPermission){
+      let p = await fileHandle.queryPermission({ mode: "readwrite" });
+      if (p !== "granted") p = await fileHandle.requestPermission({ mode: "readwrite" });
+      if (p !== "granted"){ toast("書き込み権限がありません"); return; }
+    }
+    const w = await fileHandle.createWritable();
+    await w.write(serialize());
+    await w.close();
+    setDirty(false); LS.del("backup");
+    lastSaved = Date.now(); updateAutoStatus();
+    toast("保存しました: " + fileName);
+  }catch(err){ toast("保存に失敗: " + err.message); }
+}
+async function saveAs(){
+  if (window.showSaveFilePicker){
+    try{
+      const h = await window.showSaveFilePicker({ id: "memo", suggestedName: fileName, types: EXT_TYPES });
+      fileHandle = h; fileName = h.name; updateTitle();
+      await save();
+    }catch(err){ if (err.name !== "AbortError") toast("保存に失敗: " + err.message); }
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(serialize());
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    setDirty(false); LS.del("backup");
+    toast("ダウンロードしました");
+  }
+}
+async function confirmDiscard(){
+  if (!dirty) return true;
+  return confirm("保存されていない変更があります。破棄して続けますか？");
+}
+async function newFile(){
+  if (!(await confirmDiscard())) return;
+  fileHandle = null; enc = "UTF-8"; hasBOM = false; eol = "\n";
+  setContent("", "untitled.md");
+  LS.del("backup");
+}
+
+/* ================= 自動保存 =================
+   開いたファイルにそのまま静かに上書きする。権限を要求するダイアログは絶対に出さず、
+   権限が残っているときだけ書き込む（無ければ何もしないで localStorage の控えに任せる）。 */
+let autoSave = true, t6 = 0, lastSaved = 0, saving = false;
+function scheduleAutoSave(){
+  if (!autoSave || !fileHandle || !dirty) return;
+  clearTimeout(t6);
+  // 打ち続けていても 30 秒に 1 回は保存する
+  t6 = setTimeout(autoSaveNow, Date.now() - lastSaved > 30000 ? 0 : 3000);
+}
+async function autoSaveNow(){
+  if (!autoSave || !fileHandle || !dirty || saving) return;
+  saving = true;
+  try{
+    if (fileHandle.queryPermission &&
+        await fileHandle.queryPermission({ mode: "readwrite" }) !== "granted"){
+      saving = false; return;                 // 権限が無ければ黙って諦める
+    }
+    const w = await fileHandle.createWritable();
+    await w.write(serialize());
+    await w.close();
+    setDirty(false); LS.del("backup");
+    lastSaved = Date.now();
+    updateAutoStatus();
+  }catch(err){ /* 失敗しても次の機会に再試行する */ }
+  saving = false;
+}
+function updateAutoStatus(){
+  const b = $("bAuto");
+  b.classList.toggle("on", autoSave);
+  if (!autoSave) b.textContent = "自動保存 OFF";
+  else if (!fileHandle) b.textContent = "自動保存 ON（保存先未設定）";
+  else b.textContent = "自動保存 ON" + (lastSaved ? " · " +
+    new Date(lastSaved).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "");
+}
+
+/* ================= 自動バックアップ ================= */
+let t2 = 0;
+function backupNow(){
+  if (!dirty) return;
+  LS.set("backup", { name: fileName, text: ed.value, at: Date.now(), eol: eol });
+}
+function backup(){ clearTimeout(t2); t2 = setTimeout(backupNow, 1200); }
+function checkBackup(){
+  const b = LS.get("backup", null);
+  if (!b || !b.text) return;
+  const d = new Date(b.at);
+  $("restoreMsg").textContent = "未保存の内容が残っています（" + b.name + " / " +
+    d.toLocaleString("ja-JP") + "）";
+  $("restore").classList.add("on");
+  $("bRestore").onclick = () => {
+    fileHandle = null;
+    if (b.eol) eol = b.eol;
+    setContent(b.text, b.name);
+    setDirty(true);
+    $("restore").classList.remove("on");
+    toast("復元しました（保存先は選び直してください）");
+  };
+  $("bDiscard").onclick = () => { LS.del("backup"); $("restore").classList.remove("on"); };
+}
+
+/* ================= toast ================= */
+let t3 = 0;
+function toast(msg){
+  const el = $("toast");
+  el.textContent = msg; el.classList.add("on");
+  clearTimeout(t3); t3 = setTimeout(() => el.classList.remove("on"), 1900);
+}
+
+/* ================= サイドバー ================= */
+function buildLevels(){
+  const box = $("levels");
+  box.innerHTML = "";
+  for (let i = 1; i <= 6; i++){
+    const b = document.createElement("button");
+    b.textContent = i;
+    b.title = "H" + i + " まで表示 (Ctrl+" + i + ")";
+    b.className = i <= maxLevel ? "on" : "";
+    b.onclick = () => setMaxLevel(i);
+    box.appendChild(b);
+  }
+}
+function setMaxLevel(n){
+  maxLevel = Math.min(6, Math.max(1, n));
+  LS.set("maxLevel", maxLevel);
+  buildLevels(); renderOutline(); curHead = -2; updateCurrent();
+}
+function toggleSidebar(){
+  const s = $("sidebar");
+  s.classList.toggle("hidden");
+  LS.set("side", !s.classList.contains("hidden"));
+  requestAnimationFrame(renderMirror);
+}
+
+/* ================= events ================= */
+ed.addEventListener("input", onEdit);
+ed.addEventListener("scroll", () => {
+  mirror.scrollTop = ed.scrollTop;
+  mirror.scrollLeft = ed.scrollLeft;
+  updateCurrent();
+  syncPreview();
+});
+document.addEventListener("selectionchange", () => {
+  if (document.activeElement === ed){ updateStatus(); updateCurrent(); }
+});
+ed.addEventListener("keydown", e => {
+  if (e.key === "Tab" || e.key === "Enter") syncDoc();   // 行情報を最新化してから編集する
+  // Tab / Shift+Tab : 箇条書きのレベル変更 / インデント
+  if (e.key === "Tab"){
+    e.preventDefault();
+    const s = ed.selectionStart, en = ed.selectionEnd;
+    const a = lineOf(s), b = lineOf(en);
+    if (a !== b){                                   // 複数行 → まとめて増減
+      const from = starts[a], to = starts[b] + lines[b].length;
+      const block = ed.value.slice(from, to).split("\n")
+        .map(l => e.shiftKey ? l.replace(OUTDENT, "") : INDENT + l).join("\n");
+      replaceRange(from, to, block);
+      ed.setSelectionRange(from, from + block.length);
+      return;
+    }
+    const cur = lines[a] || "", head = starts[a];
+    const indentLen = cur.length - cur.replace(/^[ \t　]*/, "").length;
+    if (e.shiftKey){                                // レベルを 1 つ戻す
+      const m = cur.match(OUTDENT);
+      if (!m) return;
+      replaceRange(head, head + m[0].length, "");
+      const p = Math.max(head, s - m[0].length);
+      ed.setSelectionRange(p, p);
+    } else if (isListLine(cur) || s - head <= indentLen){
+      replaceRange(head, head, INDENT);             // 行ごと 1 レベル下げる
+      ed.setSelectionRange(s + INDENT.length, en + INDENT.length);
+    } else replaceRange(s, en, INDENT);             // ふつうの Tab
+    return;
+  }
+  // Enter : リスト / チェックボックスの継続
+  if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && ed.selectionStart === ed.selectionEnd){
+    const li = lineOf(ed.selectionStart);
+    const cur = lines[li] || "";
+    const m = cur.match(
+      new RegExp("^([ \\t　]*)(?:([-*+]|\\d+[.)])[ \\t]+(?:\\[[ xX]\\][ \\t]+)?|([" +
+                 BOX_TODO + BOX_DONE + "]))?"));
+    if (m && (m[1] || m[2] || m[3])){
+      const rest = cur.slice(m[0].length);
+      if ((m[2] || m[3]) && !rest.trim()){   // 中身のない項目で Enter → 記号を外す
+        e.preventDefault();
+        replaceRange(starts[li], starts[li] + cur.length, m[1]);
+        return;
+      }
+      let pre = m[1];
+      if (m[2]){
+        const box = /^([-*+]|\d+[.)])[ \t]+\[[ xX]\]/.test(cur.slice(m[1].length)) ? "[ ] " : "";
+        pre += (/^\d/.test(m[2]) ? (parseInt(m[2], 10) + 1) + m[2].slice(-1) : m[2]) + " " + box;
+      } else if (m[3]){
+        pre += BOX_TODO;                     // ✅ の次の行も未完了の □ で始める
+      }
+      if (pre){ e.preventDefault(); replaceRange(ed.selectionStart, ed.selectionEnd, "\n" + pre); }
+    }
+  }
+});
+
+/* チェック欄をダブルクリック → 切り替え（それ以外の語は通常どおり選択） */
+ed.addEventListener("dblclick", () => {
+  const v = ed.value, p = ed.selectionStart;
+  for (const i of [p, p - 1]){
+    if (v[i] === BOX_TODO || v[i] === BOX_DONE){ toggleCharAt(i); return; }
+  }
+  for (let i = p - 2; i <= p + 1; i++){          // [ ] / [x] の中身を探す
+    if (v[i] === "[" && v[i + 2] === "]" && /^[ xX]$/.test(v[i + 1] || "")){
+      toggleCharAt(i + 1); return;
+    }
+  }
+});
+
+outlineEl.addEventListener("click", e => {
+  const item = e.target.closest(".oi");
+  if (!item) return;
+  const i = +item.dataset.i;
+  if (e.target.classList.contains("tw") && e.target.textContent.trim()){
+    const k = hkey(outline[i]);
+    if (collapsed.has(k)) collapsed.delete(k); else collapsed.add(k);
+    renderOutline(); curHead = -2; updateCurrent();
+    return;
+  }
+  jumpTo(i);
+});
+$("todoList").addEventListener("click", e => {
+  const it = e.target.closest(".ti");
+  if (it) jumpToLine(+it.dataset.line);
+});
+$("tabOutline").onclick = () => setTab("outline");
+$("tabTodo").onclick = () => setTab("todo");
+$("bFold").onclick = () => {
+  if (collapsed.size) collapsed.clear();
+  else outline.forEach((h, i) => {
+    const nx = outline[i + 1];
+    if (nx && nx.level > h.level) collapsed.add(hkey(h));
+  });
+  renderOutline(); curHead = -2; updateCurrent();
+};
+
+/* splitter */
+(function(){
+  const sp = $("splitter"), sb = $("sidebar");
+  let drag = false;
+  sp.addEventListener("pointerdown", e => {
+    drag = true; sp.classList.add("drag"); sp.setPointerCapture(e.pointerId);
+  });
+  sp.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const w = Math.min(600, Math.max(140, e.clientX - sb.getBoundingClientRect().left));
+    sb.style.width = w + "px";
+  });
+  sp.addEventListener("pointerup", e => {
+    if (!drag) return;
+    drag = false; sp.classList.remove("drag");
+    LS.set("sideW", parseInt(sb.style.width, 10));
+    renderMirror();
+  });
+  sp.addEventListener("dblclick", toggleSidebar);
+})();
+
+/* プレビュー幅のドラッグ */
+(function(){
+  const sp = $("pvSplit"), pv = $("preview");
+  let drag = false;
+  sp.addEventListener("pointerdown", e => {
+    drag = true; sp.classList.add("drag"); sp.setPointerCapture(e.pointerId);
+  });
+  sp.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const r = $("wrap").getBoundingClientRect();
+    const w = Math.min(r.width - 200, Math.max(200, r.right - e.clientX));
+    pv.style.width = w + "px";
+  });
+  sp.addEventListener("pointerup", () => {
+    if (!drag) return;
+    drag = false; sp.classList.remove("drag");
+    LS.set("pvW", pv.style.width);
+    renderMirror();
+  });
+})();
+
+/* toolbar */
+$("bOpen").onclick = openFile;
+$("bSave").onclick = save;
+$("bSaveAs").onclick = saveAs;
+$("bNew").onclick = newFile;
+$("bToday").onclick = todayHeading;
+$("bAuto").onclick = () => {
+  autoSave = !autoSave;
+  LS.set("auto", autoSave);
+  updateAutoStatus();
+  toast(autoSave ? "自動保存を有効にしました" : "自動保存を無効にしました（Ctrl+S で保存）");
+  if (autoSave) scheduleAutoSave();
+};
+$("bSide").onclick = toggleSidebar;
+$("bPv").onclick = () => togglePreview();
+$("bPvClose").onclick = () => togglePreview(false);
+$("bPvWin").onclick = openPvWindow;
+$("bPvSave").onclick = savePvHtml;
+$("bFind").onclick = () => openFind(false);
+$("bHelp").onclick = () => $("help").showModal();
+$("bTheme").onclick = () => {
+  const cur = document.documentElement.dataset.theme || "";
+  const nx = cur === "dark" ? "light" : cur === "light" ? "" : "dark";
+  if (nx) document.documentElement.dataset.theme = nx;
+  else delete document.documentElement.dataset.theme;
+  LS.set("theme", nx);
+  toast("テーマ: " + (nx === "dark" ? "ダーク" : nx === "light" ? "ライト" : "OS設定に従う"));
+};
+$("fi").onchange = e => { const f = e.target.files[0]; if (f) loadFile(f, null); e.target.value = ""; };
+
+/* find bar */
+q.addEventListener("input", () => { syncDoc(); runSearch(true); renderMirror(); if (matches.length) gotoMatch(curMatch); });
+q.addEventListener("keydown", e => {
+  if (e.key === "Enter"){ e.preventDefault(); gotoMatch(curMatch + (e.shiftKey ? -1 : 1)); }
+  else if (e.key === "Escape"){ e.preventDefault(); closeFind(); }
+});
+rIn.addEventListener("keydown", e => {
+  if (e.key === "Enter"){ e.preventDefault(); doReplace(); }
+  else if (e.key === "Escape"){ e.preventDefault(); closeFind(); }
+});
+$("bNext").onclick = () => gotoMatch(curMatch + 1);
+$("bPrev").onclick = () => gotoMatch(curMatch - 1);
+$("bFindClose").onclick = closeFind;
+$("tCase").onclick = e => { caseSens = !caseSens; e.currentTarget.classList.toggle("on", caseSens); q.dispatchEvent(new Event("input")); };
+$("tRe").onclick = e => { useRegex = !useRegex; e.currentTarget.classList.toggle("on", useRegex); q.dispatchEvent(new Event("input")); };
+$("tRep").onclick = e => { const on = $("rep").classList.toggle("on"); e.currentTarget.classList.toggle("on", on); if (on) rIn.focus(); };
+$("bRep").onclick = doReplace;
+$("bRepAll").onclick = doReplaceAll;
+
+/* グローバルキー */
+window.addEventListener("keydown", e => {
+  const ctrl = e.ctrlKey || e.metaKey;
+  // Ctrl+Alt+; : 日付＋時刻 / Ctrl+Alt+N : 新規（Ctrl+N はブラウザに奪われる）
+  if (ctrl && e.altKey){
+    if (e.key === ";" || e.key === ":" || e.key === "+"){
+      e.preventDefault(); insertNow("both"); return;
+    }
+    if (e.key.toLowerCase() === "n"){ e.preventDefault(); newFile(); return; }
+  }
+  // F2 / Ctrl+Shift+D : 今日の日付見出し
+  if (e.key === "F2" || (ctrl && e.shiftKey && e.key.toLowerCase() === "d")){
+    e.preventDefault(); todayHeading(); return;
+  }
+  if (ctrl && !e.altKey){
+    // Excel と同じ : Ctrl+; で日付 / Ctrl+: で時刻
+    if (e.key === ";"){ e.preventDefault(); insertNow("date"); return; }
+    if (e.key === ":"){ e.preventDefault(); insertNow("time"); return; }
+    if (e.key === "Enter"){ e.preventDefault(); toggleCheck(); return; }
+    const k = e.key.toLowerCase();
+    if (k === "s"){ e.preventDefault(); e.shiftKey ? saveAs() : save(); return; }
+    if (k === "o"){ e.preventDefault(); openFile(); return; }
+    if (k === "f"){ e.preventDefault(); openFind(false); return; }
+    if (k === "h"){ e.preventDefault(); openFind(true); return; }
+    if (k === "g"){ e.preventDefault(); gotoMatch(curMatch + (e.shiftKey ? -1 : 1)); return; }
+    if (k === "b"){ e.preventDefault(); toggleSidebar(); return; }
+    if (k === "p"){ e.preventDefault(); togglePreview(); return; }
+    if (k >= "1" && k <= "6"){ e.preventDefault(); setMaxLevel(+k); return; }
+    if (k === "0"){ e.preventDefault(); setMaxLevel(6); return; }
+    if (e.key === "+" || e.key === "=" ){ e.preventDefault(); setFont(+1); return; }
+    if (e.key === "-"){ e.preventDefault(); setFont(-1); return; }
+  }
+  if (e.key === "F3"){ e.preventDefault(); gotoMatch(curMatch + (e.shiftKey ? -1 : 1)); return; }
+  if (e.key === "F1"){ e.preventDefault(); $("help").showModal(); return; }
+  if (e.key === "Escape" && $("find").classList.contains("on")){ e.preventDefault(); closeFind(); return; }
+  if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")){
+    e.preventDefault(); jumpHead(e.key === "ArrowUp" ? -1 : 1); return;
+  }
+});
+function setFont(d){
+  const cur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--fs"));
+  const n = Math.min(28, Math.max(10, cur + d));
+  document.documentElement.style.setProperty("--fs", n + "px");
+  LS.set("fs", n);
+  requestAnimationFrame(() => { renderMirror(); toast("文字サイズ " + n + "px"); });
+}
+
+/* ドラッグ＆ドロップ */
+let dragDepth = 0;
+window.addEventListener("dragenter", e => {
+  if (![...(e.dataTransfer.types || [])].includes("Files")) return;
+  e.preventDefault(); dragDepth++; $("drop").classList.add("on");
+});
+window.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+window.addEventListener("dragleave", e => { if (--dragDepth <= 0){ dragDepth = 0; $("drop").classList.remove("on"); } });
+window.addEventListener("drop", async e => {
+  e.preventDefault(); dragDepth = 0; $("drop").classList.remove("on");
+  const items = e.dataTransfer.items;
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];   // await 前に確保する
+  if (items && items.length && items[0].getAsFileSystemHandle){
+    try{
+      const h = await items[0].getAsFileSystemHandle();
+      if (h && h.kind === "file"){ await loadHandle(h); return; }
+    }catch(err){}
+  }
+  if (file) loadFile(file, null);
+});
+
+let t4 = 0;
+window.addEventListener("resize", () => { clearTimeout(t4); t4 = setTimeout(renderMirror, 80); });
+window.addEventListener("beforeunload", e => {
+  if (dirty){ backupNow(); e.preventDefault(); e.returnValue = ""; }
+});
+
+/* ================= 起動 ================= */
+(function init(){
+  const th = LS.get("theme", "");
+  if (th) document.documentElement.dataset.theme = th;
+  const fs = LS.get("fs", 0);
+  if (fs) document.documentElement.style.setProperty("--fs", fs + "px");
+  const sw = LS.get("sideW", 0);
+  if (sw) $("sidebar").style.width = sw + "px";
+  if (LS.get("side", true) === false) $("sidebar").classList.add("hidden");
+  const pw = LS.get("pvW", "");
+  if (pw) $("preview").style.width = pw;
+  if (LS.get("pv", false)) document.body.classList.add("pvon");
+  maxLevel = LS.get("maxLevel", 6);
+  autoSave = LS.get("auto", true);
+  buildLevels();
+  if (LS.get("tab", "outline") === "todo") setTab("todo");
+  const st = document.createElement("style");
+  st.textContent = PV_CSS;
+  document.head.appendChild(st);
+
+  ed.value = [
+    "# メモ",
+    "",
+    "Ctrl+O でファイルを開く / ここへドラッグ＆ドロップ / そのまま書き始めても OK。",
+    "行頭に # を付けると、左のアウトラインに出ます（クリックでジャンプ）。",
+    "",
+    "## 使い方",
+    "- Ctrl+S : 保存（開いたファイルにそのまま上書き）",
+    "- Ctrl+F : 検索  /  Ctrl+H : 置換",
+    "- Ctrl+1〜6 : アウトラインの表示レベル切替",
+    "- Ctrl+; : 日付  /  Ctrl+: : 時刻",
+    "- F1 : ショートカット一覧",
+    "",
+    "## やること",
+    "- [ ] Ctrl+Enter で [ ] → [x] → なし と切り替わります（[ ] のダブルクリックでも可）",
+    "- [ ] この行で Enter を押すと、次の行も - [ ] で始まります",
+    "- [x] 完了した行には薄い取り消し線が付きます",
+    "- [ ] 未完了のものは左の TODO タブに集まります（クリックでジャンプ）",
+    ""
+  ].join("\n");
+  updateTitle(); refresh();
+  ed.focus();
+  checkBackup();
+  if (!window.showSaveFilePicker)
+    toast("このブラウザは直接上書き保存に非対応です（Chrome / Edge 推奨）");
+})();
+</script>
+</body>
+</html>
