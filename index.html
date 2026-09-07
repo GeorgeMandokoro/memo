@@ -3,31 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#2f6feb">
+<meta name="theme-color" content="#666666">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <title>memo</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#1f2328; --side:#f7f8fa; --bar:#fbfcfd; --line:#e3e6ea;
-  --acc:#2f6feb; --mut:#70757c; --hover:#eceff3; --sel:rgba(47,111,235,.22);
+  --acc:#0075b8; --onacc:#ffffff; --mut:#70757c; --hover:#eceff3; --sel:rgba(0,117,184,.22);
   --hl:rgba(255,214,0,.55); --hlcur:rgba(255,138,0,.75);
-  --htint:rgba(47,111,235,.07); --quote:rgba(120,130,145,.10); --code:rgba(120,130,145,.09);
+  --htint:rgba(0,117,184,.08); --quote:rgba(120,130,145,.10); --code:rgba(120,130,145,.09);
   --warn:#fff6d5; --warnfg:#5a4600; --strike:rgba(31,35,40,.62);
   --fs:13px; --lh:1.75;
 }
 @media (prefers-color-scheme:dark){ :root:not([data-theme=light]){
   --bg:#1e2127; --fg:#d5d9e0; --side:#191c21; --bar:#1b1e24; --line:#2c313a;
-  --acc:#6fa8ff; --mut:#8b93a1; --hover:#252a32; --sel:rgba(111,168,255,.25);
+  --acc:#2f96d8; --onacc:#1e2127; --mut:#8b93a1; --hover:#252a32; --sel:rgba(47,150,216,.25);
   --hl:rgba(255,214,0,.35); --hlcur:rgba(255,138,0,.55);
-  --htint:rgba(111,168,255,.10); --quote:rgba(140,150,165,.10); --code:rgba(140,150,165,.09);
+  --htint:rgba(47,150,216,.12); --quote:rgba(140,150,165,.10); --code:rgba(140,150,165,.09);
   --warn:#3a3416; --warnfg:#f0e2a8; --strike:rgba(213,217,224,.60);
 }}
 :root[data-theme=dark]{
   --bg:#1e2127; --fg:#d5d9e0; --side:#191c21; --bar:#1b1e24; --line:#2c313a;
-  --acc:#6fa8ff; --mut:#8b93a1; --hover:#252a32; --sel:rgba(111,168,255,.25);
+  --acc:#2f96d8; --onacc:#1e2127; --mut:#8b93a1; --hover:#252a32; --sel:rgba(47,150,216,.25);
   --hl:rgba(255,214,0,.35); --hlcur:rgba(255,138,0,.55);
-  --htint:rgba(111,168,255,.10); --quote:rgba(140,150,165,.10); --code:rgba(140,150,165,.09);
+  --htint:rgba(47,150,216,.12); --quote:rgba(140,150,165,.10); --code:rgba(140,150,165,.09);
   --warn:#3a3416; --warnfg:#f0e2a8; --strike:rgba(213,217,224,.60);
 }
 *{box-sizing:border-box}
@@ -94,7 +94,7 @@ body.todo #levels,body.todo #bFold{display:none}
 #levels{display:flex;gap:1px}
 #levels button{width:18px;height:18px;border-radius:4px;font-size:10px;color:var(--mut)}
 #levels button:hover{background:var(--hover)}
-#levels button.on{background:var(--acc);color:#fff}
+#levels button.on{background:var(--acc);color:var(--onacc)}
 #outline{flex:1;overflow:auto;padding:4px 0 20px}
 .oi{
   display:flex;align-items:center;gap:2px;padding:2px 8px 2px 0;cursor:pointer;
@@ -171,7 +171,7 @@ body.pvon #pvSplit{display:block}
 #find input:focus{outline:none;border-color:var(--acc)}
 #find .tg{width:24px;height:24px;border-radius:5px;color:var(--mut);font-size:11px}
 #find .tg:hover{background:var(--hover)}
-#find .tg.on{background:var(--acc);color:#fff}
+#find .tg.on{background:var(--acc);color:var(--onacc)}
 #find .nav{width:24px;height:24px;border-radius:5px;font-size:12px}
 #find .nav:hover{background:var(--hover)}
 #cnt{color:var(--mut);min-width:92px;font-size:11.5px}
@@ -195,7 +195,7 @@ body.pvon #pvSplit{display:block}
 /* ---------- misc ---------- */
 #drop{
   position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
-  background:rgba(47,111,235,.12);border:3px dashed var(--acc);
+  background:rgba(0,117,184,.12);border:3px dashed var(--acc);
   font-size:18px;font-weight:700;color:var(--acc);
 }
 #drop.on{display:flex}
@@ -940,7 +940,7 @@ const PV_CSS = `
 .md code{font-family:Consolas,monospace;font-size:.9em;background:rgba(128,128,128,.16);
   padding:.1em .35em;border-radius:4px}
 .md pre code{background:none;padding:0}
-.md a{color:var(--acc,#2f6feb)}
+.md a{color:var(--acc,#0075b8)}
 .md hr{border:0;border-top:1px solid var(--line,#e3e6ea);margin:1.5em 0}
 .md table{border-collapse:collapse;margin:.8em 0}
 .md th,.md td{border:1px solid var(--line,#e3e6ea);padding:.35em .7em}
