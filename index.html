@@ -1452,13 +1452,8 @@ ed.addEventListener("keydown", e => {
     const m = cur.match(
       new RegExp("^([ \\t　]*)(?:([-*+]|\\d+[.)])[ \\t]+(?:\\[[ xX]\\][ \\t]+)?|([" +
                  BOX_TODO + BOX_DONE + "]))?"));
-    if (m && (m[1] || m[2] || m[3])){
-      const rest = cur.slice(m[0].length);
-      if ((m[2] || m[3]) && !rest.trim()){   // 中身のない項目で Enter → 記号を外す
-        e.preventDefault();
-        replaceRange(starts[li], starts[li] + cur.length, m[1]);
-        return;
-      }
+    // 行頭（記号より前）での Enter は素の改行にする（記号を二重に付けない）
+    if (m && (m[1] || m[2] || m[3]) && ed.selectionStart - starts[li] >= m[0].length){
       let pre = m[1];
       if (m[2]){
         const box = /^([-*+]|\d+[.)])[ \t]+\[[ xX]\]/.test(cur.slice(m[1].length)) ? "[ ] " : "";
