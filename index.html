@@ -128,6 +128,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 }
 #ed{z-index:2;background:transparent;color:var(--fg);resize:none;outline:none;overflow:auto}
 #ed::selection{background:var(--sel)}
+#datePick{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 #mirror{z-index:1;color:transparent;overflow:hidden;pointer-events:none;user-select:none}
 #mirror .ln{margin:0 -18px;padding:0 18px}
 #mirror .hd{background:var(--htint);box-shadow:inset 3px 0 0 var(--acc)}
@@ -324,6 +325,7 @@ dialog .note{margin-top:14px;color:var(--mut);font-size:11.5px;line-height:1.8}
 
 <div id="drop">ドロップして開く</div>
 <div id="toast"></div>
+<input type="date" id="datePick" tabindex="-1" aria-hidden="true">
 <input type="file" id="fi" hidden accept=".txt,.md,.markdown,.mdown,.log,.csv,.json,.yml,.yaml,text/*">
 
 <dialog id="help">
@@ -347,10 +349,9 @@ dialog .note{margin-top:14px;color:var(--mut);font-size:11.5px;line-height:1.8}
         <td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>箇条書きのレベル変更</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>見出しレベル全表示</td>
         <td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd></td><td>文字サイズ</td></tr>
-    <tr><td><kbd>Alt</kbd>+<kbd>&#8593;</kbd> / <kbd>&#8595;</kbd></td><td>前 / 次の見出しへ</td>
-        <td><kbd>F1</kbd></td><td>このヘルプ</td></tr>
     <tr><td><kbd>F3</kbd> / <kbd>F4</kbd></td><td>上 / 下の見出しへ</td>
         <td><kbd>F5</kbd> / <kbd>F6</kbd></td><td>文字を小さく / 大きく</td></tr>
+    <tr><td><kbd>F1</kbd></td><td>このヘルプ</td><td></td><td></td></tr>
     <tr><td colspan="4" style="padding-top:10px"></td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>;</kbd></td><td>日付を挿入 (2026/09/03)</td>
         <td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>[ ] → [x] → なし を切替</td></tr>
@@ -358,7 +359,16 @@ dialog .note{margin-top:14px;color:var(--mut);font-size:11.5px;line-height:1.8}
         <td>[ ] をダブルクリック</td><td>その場でチェック切替</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>;</kbd></td><td>日付＋時刻</td>
         <td><kbd>Enter</kbd></td><td>タスク行は次も [ ] で継続</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>&#8593;</kbd> / <kbd>&#8595;</kbd> / <kbd>;</kbd></td><td>カレンダーで日付を選ぶ</td>
+        <td><kbd>Ctrl</kbd>+<kbd>&#8592;</kbd> / <kbd>&#8594;</kbd></td><td>行内の日付を 1 日戻す / 進める</td></tr>
+    <tr><td></td><td></td>
+        <td><kbd>Ctrl</kbd>+<kbd>&#8593;</kbd> / <kbd>&#8595;</kbd></td><td>行内の日付を 1 週間戻す / 進める</td></tr>
   </table>
+  <div class="note">
+    <b>今週のタスクに &#11088;</b>：未完了タスクの日付が今週（日曜はじまり）の土曜以前なら、
+    日付の直後に &#11088; を付けます（期限切れも対象）。日付を書き換えたり完了にしたりして対象外になると外れます。
+    ファイルを開いたとき、<kbd>Ctrl</kbd>+<kbd>;</kbd> / <kbd>Ctrl</kbd>+<kbd>Enter</kbd> のとき、カーソルが別の行へ移ったときに更新します。
+  </div>
   <div class="note">
     <b>自動保存</b>：ファイルを開いていれば、入力が止まって 3 秒後（打ち続けても 30 秒に 1 回）に
     そのファイルへ静かに上書きします。ダイアログは出ません。
@@ -1027,7 +1037,155 @@ function editorTarget(){
 }
 function insertNow(kind){
   if (!editorTarget()) return;
-  replaceRange(ed.selectionStart, ed.selectionEnd, nowStr(kind));
+  // 日付の後ろは続けて打てるよう半角スペースを 1 つ空ける
+  replaceRange(ed.selectionStart, ed.selectionEnd, nowStr(kind) + (kind === "date" ? " " : ""));
+  if (kind !== "time") starFixLine();
+}
+
+/* ================= 今週のタスクに ⭐ =================
+   日曜はじまりで今週の土曜までの日付（期限切れも含む）が入った未完了タスクの、
+   日付の直後に ⭐ を付ける。日付を書き換えたり完了にしたりして対象外になったら、
+   日付の直後の ⭐ だけを外す（行内のほかの場所の ⭐ には触らない）。 */
+const STAR = "⭐";
+const ANY_TASK = /^[ \t　]*(?:(?:[-*+]|\d+[.)])[ \t]+\[([ xX])\]|([□✅☑]))/;
+const TASK_DATE = /(?<!\d)(\d{4})([\/-])(\d{1,2})\2(\d{1,2})(?!\d)(?:[ T]\d{1,2}:\d{2}(?!\d))?/;
+const STAR_AFTER = /^[ \t]*⭐\uFE0F?/;
+function weekEnd(){
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6 - d.getDay());
+}
+/* 1 行に必要な修正 { at, del, ins }（行内の位置）。直す必要がなければ null */
+function starEdit(l, end){
+  const t = l.match(ANY_TASK);
+  if (!t) return null;
+  const m = l.match(TASK_DATE);
+  if (!m) return null;
+  const mo = +m[3] - 1, da = +m[4], d = new Date(+m[1], mo, da);
+  const open = t[1] === " " || t[2] === "□";
+  const want = open && d.getMonth() === mo && d.getDate() === da && d <= end;
+  const at = m.index + m[0].length, has = l.slice(at).match(STAR_AFTER);
+  if (want && !has) return { at: at, del: 0, ins: " " + STAR };
+  if (!want && has) return { at: at, del: has[0].length, ins: "" };
+  return null;
+}
+function starLine(l, end){
+  const x = starEdit(l, end);
+  return x ? l.slice(0, x.at) + x.ins + l.slice(x.at + x.del) : l;
+}
+/* 文書全体を直す（コードブロック内は対象外）。直した件数を返す */
+function starText(t){
+  const end = weekEnd(), L = t.split("\n");
+  let n = 0, fence = null;
+  for (let i = 0; i < L.length; i++){
+    const fm = L[i].match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fm){
+      if (!fence) fence = fm[1][0];
+      else if (L[i].trimStart()[0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const s = starLine(L[i], end);
+    if (s !== L[i]){ L[i] = s; n++; }
+  }
+  return { text: L.join("\n"), n: n };
+}
+/* 指定した行を直す（キャレットとスクロール位置は保つ）。省略時はカーソル行 */
+function starFixLine(li){
+  syncDoc();
+  if (li === undefined) li = lineOf(ed.selectionStart);
+  if (li < 0 || li >= lines.length) return;
+  const x = starEdit(lines[li], weekEnd());
+  if (!x) return;
+  const pos = starts[li] + x.at, d = x.ins.length - x.del;
+  const s = ed.selectionStart, e2 = ed.selectionEnd, top = ed.scrollTop;
+  const mv = p => p > pos ? Math.max(pos, p + d) : p;
+  replaceRange(pos, pos + x.del, x.ins);
+  ed.setSelectionRange(mv(s), mv(e2));
+  ed.scrollTop = top;
+  syncDoc();
+}
+/* カーソルが別の行へ移ったら、離れた行を直す（書き換えている最中の行には触らない） */
+let starPrev = -1;
+function starOnMove(){
+  if (ed.selectionStart !== ed.selectionEnd) return;   // 範囲選択中は何もしない
+  const v = ed.value, p = ed.selectionStart;
+  const cur = v.lastIndexOf("\n", p - 1) + 1;          // カーソル行の先頭
+  if (cur === starPrev) return;
+  const prev = starPrev;
+  starPrev = cur;
+  if (prev < 0 || prev > v.length) return;
+  syncDoc();
+  const li = lineOf(prev);
+  if (li !== lineOf(p)) starFixLine(li);
+  starPrev = ed.value.lastIndexOf("\n", ed.selectionStart - 1) + 1;
+}
+/* 開いたファイルを直す。変更があれば未保存扱いにして自動保存に任せる */
+function starOpened(){
+  starPrev = -1;
+  const r = starText(ed.value);
+  if (!r.n) return 0;
+  ed.value = r.text;
+  setDirty(true); refresh(); backup(); scheduleAutoSave();
+  return r.n;
+}
+
+/* ================= 日付の変更（カレンダー / 1 日・1 週間ずつ） ================= */
+const DATE_G = /(?<!\d)(\d{4})([\/-])(\d{1,2})\2(\d{1,2})(?!\d)/g;
+/* カーソル行の日付を探す。カーソルが日付（後ろの空白・⭐ も含む）に触れていればそれ、
+   無ければ near のとき行内でいちばん近いもの */
+function dateAtCaret(near){
+  syncDoc();
+  const p = ed.selectionStart, li = lineOf(p), l = lines[li], c = p - starts[li];
+  let best = null, bd = Infinity;
+  for (const m of l.matchAll(DATE_G)){
+    const s = m.index, e0 = s + m[0].length;
+    const e = e0 + l.slice(e0).match(/^[ \t]*(?:⭐\uFE0F?[ \t]*)?/)[0].length;
+    const dist = c < s ? s - c : c > e ? c - e : 0;
+    if (dist < bd){ bd = dist; best = { from: starts[li] + s, to: starts[li] + e0, sep: m[2],
+      date: new Date(+m[1], +m[3] - 1, +m[4]) }; }
+  }
+  return best && (bd === 0 || near) ? best : null;
+}
+const fmtDate = (d, sep) => d.getFullYear() + sep + pad2(d.getMonth() + 1) + sep + pad2(d.getDate());
+/* 日付を書き換える（キャレットは日付内の同じ位置か、日付より後ろなら同じ相対位置に保つ） */
+function setDateAt(t, d){
+  const str = fmtDate(d, t.sep), s = ed.selectionStart, delta = str.length - (t.to - t.from);
+  replaceRange(t.from, t.to, str);
+  const p = s > t.to ? s + delta : Math.min(s, t.from + str.length);
+  ed.setSelectionRange(p, p);
+  starFixLine();
+}
+/* Ctrl+←/→ (∓1 日) / Ctrl+↑/↓ (∓1 週間) : カーソル行の日付をずらす。日付が無い行では何もしない */
+function shiftDate(days){
+  const t = dateAtCaret(true);
+  if (!t) return false;
+  const d = t.date;
+  setDateAt(t, new Date(d.getFullYear(), d.getMonth(), d.getDate() + days));
+  return true;
+}
+/* Alt+↑ / Alt+↓ / Alt+; : カレンダーで日付を選ぶ。カーソルが日付の上ならその日付を変更、それ以外は挿入 */
+function pickDate(){
+  if (!editorTarget()) return;
+  const inp = $("datePick");
+  if (!inp.showPicker){ toast("このブラウザはカレンダー表示に非対応です"); return; }
+  const t = dateAtCaret(false);
+  const s = ed.selectionStart, e2 = ed.selectionEnd, top = ed.scrollTop;
+  // 挿入のときは空にしておく（今日を初期値にすると、今日を選んでも change が起きない）
+  const d = t && t.date;
+  inp.value = d ? d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) : "";
+  // カーソル行のすぐ下にカレンダーが出るよう、見えない入力欄をそこへ置く
+  const r = ed.getBoundingClientRect(), li = lineOf(s);
+  const y = (lineTops[li] !== undefined ? lineTops[li] - padTop : 0) - ed.scrollTop;
+  inp.style.left = (r.left + 24) + "px";
+  inp.style.top = Math.max(r.top, Math.min(r.bottom - 24, r.top + padTop + y)) + "px";
+  inp.onchange = () => {
+    if (!inp.value) return;
+    const [yy, mm, dd] = inp.value.split("-").map(Number), nd = new Date(yy, mm - 1, dd);
+    ed.focus(); ed.scrollTop = top;
+    if (t){ ed.setSelectionRange(s, e2); setDateAt(t, nd); }
+    else { replaceRange(s, e2, fmtDate(nd, "/") + " "); starFixLine(); }
+  };
+  try{ inp.showPicker(); }catch(err){ toast("カレンダーを開けませんでした"); }
 }
 
 /* 今日の日付見出し。1 日に何本でも作れるよう、押すたびに必ず新しく挿入する。 */
@@ -1081,12 +1239,15 @@ function toggleCheck(){
   const from = starts[a], to = starts[b] + lines[b].length;
   const src = ed.value.slice(from, to);
   const one = a === b;
-  const block = src.split("\n").map(l => cycleLine(l, one)).join("\n");
+  const end = weekEnd();
+  const block = src.split("\n")
+    .map(l => one ? cycleLine(l, one) : starLine(cycleLine(l, one), end)).join("\n");
   if (block === src) return;
   replaceRange(from, to, block);
   if (one){
     const p = Math.max(from, Math.min(from + block.length, s + block.length - src.length));
     ed.setSelectionRange(p, p);
+    starFixLine();                     // 1 行のときはキャレットを保ったまま ⭐ を直す
   } else ed.setSelectionRange(from, from + block.length);
 }
 /* □ / ✅ をダブルクリックしたらその 1 文字だけ切り替える */
@@ -1168,7 +1329,8 @@ async function loadFile(file, handle){
   rememberFile(fileHandle);
   setContent(d.text, file.name);
   LS.del("backup");
-  toast("開きました: " + file.name);
+  const n = starOpened();
+  toast("開きました: " + file.name + (n ? "（" + STAR + " を " + n + " 件更新）" : ""));
 }
 async function loadHandle(h){
   if (h.queryPermission){
@@ -1414,10 +1576,23 @@ ed.addEventListener("scroll", () => {
   syncPreview();
 });
 document.addEventListener("selectionchange", () => {
-  if (document.activeElement === ed){ updateStatus(); updateCurrent(); }
+  if (document.activeElement === ed){ updateStatus(); updateCurrent(); starOnMove(); }
 });
 ed.addEventListener("keydown", e => {
   if (e.key === "Tab" || e.key === "Enter") syncDoc();   // 行情報を最新化してから編集する
+  // 行内の日付をずらす : Ctrl+←/→ で ∓1 日、Ctrl+↑/↓ で ∓1 週間
+  // （↑↓ は日付の無い行では本来の段落移動のまま。←→ は単語移動を使わないので常に上書き）
+  const DAYS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+  if (e.key in DAYS && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey){
+    const moved = shiftDate(DAYS[e.key]);
+    if (moved || e.key === "ArrowLeft" || e.key === "ArrowRight") e.preventDefault();
+    return;
+  }
+  // Alt+↑ / Alt+↓ / Alt+; : カレンダーで日付を選ぶ
+  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+      (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === ";")){
+    e.preventDefault(); pickDate(); return;
+  }
   // Tab / Shift+Tab : 箇条書きのレベル変更 / インデント
   if (e.key === "Tab"){
     e.preventDefault();
@@ -1470,11 +1645,11 @@ ed.addEventListener("keydown", e => {
 ed.addEventListener("dblclick", () => {
   const v = ed.value, p = ed.selectionStart;
   for (const i of [p, p - 1]){
-    if (v[i] === BOX_TODO || v[i] === BOX_DONE){ toggleCharAt(i); return; }
+    if (v[i] === BOX_TODO || v[i] === BOX_DONE){ toggleCharAt(i); starFixLine(); return; }
   }
   for (let i = p - 2; i <= p + 1; i++){          // [ ] / [x] の中身を探す
     if (v[i] === "[" && v[i + 2] === "]" && /^[ xX]$/.test(v[i + 1] || "")){
-      toggleCharAt(i + 1); return;
+      toggleCharAt(i + 1); starFixLine(); return;
     }
   }
 });
@@ -1638,9 +1813,6 @@ window.addEventListener("keydown", e => {
   }
   if (e.key === "F1"){ e.preventDefault(); $("help").showModal(); return; }
   if (e.key === "Escape" && $("find").classList.contains("on")){ e.preventDefault(); closeFind(); return; }
-  if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")){
-    e.preventDefault(); jumpHead(e.key === "ArrowUp" ? -1 : 1); return;
-  }
 });
 function setFont(d){
   const cur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--fs"));
