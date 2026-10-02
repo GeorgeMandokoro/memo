@@ -213,7 +213,7 @@ body.pvon #pvSplit{display:block}
 .bar.on{display:flex}
 .bar .btn{padding:3px 10px;border:1px solid rgba(128,128,128,.4);border-radius:5px}
 .bar .btn:hover{background:rgba(128,128,128,.15)}
-#restore{background:var(--warn);color:var(--warnfg)}
+#restore,#conflict{background:var(--warn);color:var(--warnfg)}
 #reopen{background:var(--side)}
 #reopen #reopenMsg{color:var(--mut)}
 dialog{
@@ -259,6 +259,12 @@ dialog .note{margin-top:14px;color:var(--mut);font-size:11.5px;line-height:1.8}
   <span id="reopenMsg"></span>
   <button class="btn" id="bReopen">開く</button>
   <button class="btn" id="bReopenNo">閉じる</button>
+</div>
+
+<div id="conflict" class="bar">
+  <span id="conflictMsg"></span>
+  <button class="btn" id="bReload">ファイルから読み直す</button>
+  <button class="btn" id="bOverwrite">この内容で上書き</button>
 </div>
 
 <div id="app">
@@ -1326,9 +1332,12 @@ async function loadFile(file, handle){
   enc = d.enc; hasBOM = d.bom;
   fileHandle = handle || null;
   lastSaved = 0;
+  diskMod = handle ? file.lastModified : 0;
+  clearConflict();
   rememberFile(fileHandle);
   setContent(d.text, file.name);
-  LS.del("backup");
+  bkDel();
+  announceOpened(fileHandle);
   const n = starOpened();
   toast("開きました: " + file.name + (n ? "（" + STAR + " を " + n + " 件更新）" : ""));
 }
@@ -1355,7 +1364,7 @@ function serialize(){
   const bom = String.fromCharCode(0xFEFF);
   return new Blob([hasBOM ? bom + t : t], { type: "text/plain;charset=utf-8" });
 }
-async function save(){
+async function save(force){
   if (!fileHandle) return saveAs();
   try{
     if (fileHandle.queryPermission){
@@ -1363,10 +1372,12 @@ async function save(){
       if (p !== "granted") p = await fileHandle.requestPermission({ mode: "readwrite" });
       if (p !== "granted"){ toast("書き込み権限がありません"); return; }
     }
+    if (force !== true && await diskChanged()){ showConflict(); return; }
     const w = await fileHandle.createWritable();
     await w.write(serialize());
     await w.close();
-    setDirty(false); LS.del("backup");
+    await stampDisk();
+    setDirty(false); bkDel(); clearConflict();
     lastSaved = Date.now(); updateAutoStatus();
     toast("保存しました: " + fileName);
   }catch(err){ toast("保存に失敗: " + err.message); }
@@ -1376,6 +1387,7 @@ async function saveAs(){
     try{
       const h = await window.showSaveFilePicker({ id: "memo", suggestedName: fileName, types: EXT_TYPES });
       fileHandle = h; fileName = h.name; updateTitle();
+      diskMod = 0; clearConflict();         // 別のファイルになるので照合し直さない
       rememberFile(h);
       await save();
     }catch(err){ if (err.name !== "AbortError") toast("保存に失敗: " + err.message); }
@@ -1385,7 +1397,7 @@ async function saveAs(){
     a.download = fileName;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    setDirty(false); LS.del("backup");
+    setDirty(false); bkDel();
     toast("ダウンロードしました");
   }
 }
@@ -1396,8 +1408,9 @@ async function confirmDiscard(){
 async function newFile(){
   if (!(await confirmDiscard())) return;
   fileHandle = null; enc = "UTF-8"; hasBOM = false; eol = "\n";
+  diskMod = 0; clearConflict();
   setContent("", "untitled.md");
-  LS.del("backup");
+  bkDel();
 }
 
 /* ================= 前回のファイル / PWA =================
@@ -1436,7 +1449,6 @@ function rememberFile(h){
 let launchHandled = false;
 async function restoreLast(){
   if (launchHandled) return;                 // ファイルを指定して起動された場合は何もしない
-  if (LS.get("backup", null)) return;        // 未保存の復元バーを優先する
   let h = null;
   try { h = await dbGet("last"); } catch(err){ return; }
   if (!h || !h.queryPermission) return;
@@ -1484,17 +1496,19 @@ function scheduleAutoSave(){
   t6 = setTimeout(autoSaveNow, Date.now() - lastSaved > 30000 ? 0 : 3000);
 }
 async function autoSaveNow(){
-  if (!autoSave || !fileHandle || !dirty || saving) return;
+  if (!autoSave || !fileHandle || !dirty || saving || conflict) return;
   saving = true;
   try{
     if (fileHandle.queryPermission &&
         await fileHandle.queryPermission({ mode: "readwrite" }) !== "granted"){
       saving = false; return;                 // 権限が無ければ黙って諦める
     }
+    if (await diskChanged()){ showConflict(); saving = false; return; }
     const w = await fileHandle.createWritable();
     await w.write(serialize());
     await w.close();
-    setDirty(false); LS.del("backup");
+    await stampDisk();
+    setDirty(false); bkDel();
     lastSaved = Date.now();
     updateAutoStatus();
   }catch(err){ /* 失敗しても次の機会に再試行する */ }
@@ -1504,34 +1518,156 @@ function updateAutoStatus(){
   const b = $("bAuto");
   b.classList.toggle("on", autoSave);
   if (!autoSave) b.textContent = "自動保存 OFF";
+  else if (conflict) b.textContent = "自動保存 停止中（外部で更新）";
   else if (!fileHandle) b.textContent = "自動保存 ON（保存先未設定）";
   else b.textContent = "自動保存 ON" + (lastSaved ? " · " +
     new Date(lastSaved).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "");
+}
+
+/* ================= 外部での変更の検知 =================
+   開いた時点（最後に保存した時点）のファイル更新日時を覚えておき、書き込む前に照合する。
+   別のウインドウや別のアプリで書き換えられていたら、黙って上書きせずに自動保存を止める。 */
+let diskMod = 0, conflict = false;
+async function diskChanged(){
+  if (!fileHandle || !diskMod) return false;
+  try { return (await fileHandle.getFile()).lastModified !== diskMod; }
+  catch(err){ return false; }                // 読めないときは照合できないので従来どおり
+}
+async function stampDisk(){
+  try { diskMod = fileHandle ? (await fileHandle.getFile()).lastModified : 0; }
+  catch(err){ diskMod = 0; }
+}
+function showConflict(){
+  conflict = true;
+  $("conflictMsg").textContent = fileName +
+    " は別の場所（別ウインドウ・別のアプリ）で更新されています。自動保存を止めました。";
+  $("conflict").classList.add("on");
+  updateAutoStatus();
+}
+function clearConflict(){
+  if (!conflict) return;
+  conflict = false;
+  $("conflict").classList.remove("on");
+  updateAutoStatus();
+}
+/* ファイルから読み直す。カーソルとスクロール位置はそのまま残す */
+async function reloadFromDisk(){
+  const f = await fileHandle.getFile();
+  const d = await decodeFile(f);
+  const s = ed.selectionStart, e = ed.selectionEnd, top = ed.scrollTop;
+  enc = d.enc; hasBOM = d.bom;
+  setContent(d.text, f.name);
+  diskMod = f.lastModified;
+  clearConflict(); bkDel();
+  ed.setSelectionRange(Math.min(s, ed.value.length), Math.min(e, ed.value.length));
+  ed.scrollTop = top;
+  starOpened();
+}
+/* ウインドウに戻ってきたとき、未編集なら黙って最新を読み込む。編集中なら警告だけ出す */
+async function checkDisk(){
+  if (!fileHandle || saving || conflict || !(await diskChanged())) return;
+  if (dirty){ showConflict(); return; }
+  try { await reloadFromDisk(); toast("別の場所での変更を読み込みました"); }
+  catch(err){}
+}
+$("bReload").onclick = async () => {
+  if (dirty && !confirm("このウインドウでの未保存の変更は破棄されます。読み直しますか？")) return;
+  try { await reloadFromDisk(); toast("読み直しました: " + fileName); }
+  catch(err){ toast("読み直せませんでした: " + err.message); }
+};
+$("bOverwrite").onclick = () => save(true);
+
+/* ================= 複数ウインドウ =================
+   ウインドウごとに ID を持ち、未保存の退避（localStorage）をウインドウ単位に分ける。
+   BroadcastChannel で開いている memo を問い合わせ、生きているウインドウの退避には触れない。
+   ID は sessionStorage に置くので、再読み込みしても自分の退避を自分で復元できる。 */
+const newWinId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+let WIN = "";
+try { WIN = sessionStorage.getItem("memo.win") || ""; } catch(e){}
+function setWin(id){ WIN = id; try { sessionStorage.setItem("memo.win", id); } catch(e){} }
+setWin(WIN || newWinId());
+const bkKey = id => "bk." + (id || WIN);
+function bkDel(id){ LS.del(bkKey(id)); }
+function bkList(){
+  const out = [];
+  try{
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith("memo.bk.")) continue;
+      const b = LS.get(k.slice(5), null);
+      if (b && b.text) out.push(Object.assign({}, b, { id: k.slice(8) }));
+    }
+  }catch(e){}
+  return out.sort((a, b) => b.at - a.at);
+}
+let bc = null;
+try { bc = new BroadcastChannel("memo"); } catch(e){}
+const peers = new Set();
+if (bc) bc.onmessage = async ev => {
+  const m = ev.data || {};
+  if (m.t === "ping") bc.postMessage({ t: "pong", win: WIN, to: m.win });
+  else if (m.t === "pong" && m.to === WIN){
+    peers.add(m.win);
+    if (m.win === WIN) setWin(newWinId());   // タブの複製で ID まで写った場合は振り直す
+  }
+  else if (m.t === "opened" && m.win !== WIN && fileHandle && fileHandle.isSameEntry){
+    try { if (await fileHandle.isSameEntry(m.h)) bc.postMessage({ t: "dup", to: m.win }); }
+    catch(e){}
+  }
+  else if (m.t === "dup" && m.to === WIN)
+    toast("このファイルは別のウインドウでも開いています");
+};
+/* 開いている memo ウインドウの ID を集める（返事を少しだけ待つ） */
+function findPeers(ms){
+  peers.clear();
+  if (!bc) return Promise.resolve(peers);
+  bc.postMessage({ t: "ping", win: WIN });
+  return new Promise(r => setTimeout(() => r(peers), ms));
+}
+/* 同じファイルを開いているウインドウがあれば知らせてもらう */
+function announceOpened(h){
+  if (!bc || !h) return;
+  try { bc.postMessage({ t: "opened", win: WIN, h: h }); } catch(e){}
 }
 
 /* ================= 自動バックアップ ================= */
 let t2 = 0;
 function backupNow(){
   if (!dirty) return;
-  LS.set("backup", { name: fileName, text: ed.value, at: Date.now(), eol: eol });
+  LS.set(bkKey(), { name: fileName, text: ed.value, at: Date.now(), eol: eol });
 }
 function backup(){ clearTimeout(t2); t2 = setTimeout(backupNow, 1200); }
-function checkBackup(){
-  const b = LS.get("backup", null);
-  if (!b || !b.text) return;
-  const d = new Date(b.at);
+/* 閉じられたウインドウの退避だけを出す。複数あれば新しいものから 1 件ずつ */
+function checkBackup(alive){
+  const old = LS.get("backup", null);       // 旧形式（全ウインドウ共通の 1 件）を移す
+  if (old){ LS.set(bkKey(newWinId()), old); LS.del("backup"); }
+  const list = bkList().filter(b => !alive.has(b.id));
+  if (!list.length) return false;
+  const b = list[0];
   $("restoreMsg").textContent = "未保存の内容が残っています（" + b.name + " / " +
-    d.toLocaleString("ja-JP") + "）";
+    new Date(b.at).toLocaleString("ja-JP") + "）" +
+    (list.length > 1 ? "　ほかに " + (list.length - 1) + " 件（次に開くウインドウで表示）" : "");
   $("restore").classList.add("on");
-  $("bRestore").onclick = () => {
-    fileHandle = null;
+  $("bRestore").onclick = async () => {
+    $("restore").classList.remove("on");
+    if (!LS.get(bkKey(b.id), null)){ toast("別のウインドウで処理済みです"); return; }
+    if (!(await confirmDiscard())) return;
+    bkDel(b.id);
+    fileHandle = null; diskMod = 0; clearConflict();
     if (b.eol) eol = b.eol;
     setContent(b.text, b.name);
-    setDirty(true);
-    $("restore").classList.remove("on");
+    setDirty(true); backupNow();
     toast("復元しました（保存先は選び直してください）");
   };
-  $("bDiscard").onclick = () => { LS.del("backup"); $("restore").classList.remove("on"); };
+  $("bDiscard").onclick = () => { bkDel(b.id); $("restore").classList.remove("on"); };
+  return true;
+}
+/* 起動時: 退避の確認 → 前回のファイル。別のウインドウが開いていれば前回のファイルは開かない
+   （同じファイルを二重に開かないため。別のファイルは Ctrl+O で開く） */
+async function startup(){
+  const alive = await findPeers(300);
+  if (checkBackup(alive) || alive.size) return;
+  await restoreLast();
 }
 
 /* ================= toast ================= */
@@ -1845,6 +1981,8 @@ window.addEventListener("drop", async e => {
 
 let t4 = 0;
 window.addEventListener("resize", () => { clearTimeout(t4); t4 = setTimeout(renderMirror, 80); });
+window.addEventListener("focus", () => { checkDisk(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkDisk(); });
 window.addEventListener("beforeunload", e => {
   if (dirty){ backupNow(); e.preventDefault(); e.returnValue = ""; }
 });
@@ -1891,10 +2029,9 @@ window.addEventListener("beforeunload", e => {
   ].join("\n");
   updateTitle(); refresh();
   ed.focus();
-  checkBackup();
   setupLaunchQueue();
   registerSW();
-  setTimeout(() => restoreLast().catch(() => {}), 250);
+  startup().catch(() => {});
   if (!window.showSaveFilePicker)
     toast("このブラウザは直接上書き保存に非対応です（Chrome / Edge 推奨）");
 })();
