@@ -91,6 +91,7 @@ body.todo #levels,body.todo #bFold{display:none}
 .ti .tx{
   flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
+.ti.dn .tc,.ti.dn .tx{color:var(--mut)}   /* 完了済みの親（未完了の子の階層を示すためだけに出す） */
 #levels{display:flex;gap:1px}
 #levels button{width:18px;height:18px;border-radius:4px;font-size:10px;color:var(--mut)}
 #levels button:hover{background:var(--hover)}
@@ -376,6 +377,11 @@ dialog .note{margin-top:14px;color:var(--mut);font-size:11.5px;line-height:1.8}
     ファイルを開いたとき、<kbd>Ctrl</kbd>+<kbd>;</kbd> / <kbd>Ctrl</kbd>+<kbd>Enter</kbd> のとき、カーソルが別の行へ移ったときに更新します。
   </div>
   <div class="note">
+    <b>親タスクにも &#11088;</b>：未完了の子タスク（孫以下も含む）のどれかに &#11088; があれば、ルートの親タスクにも &#11088; を付けます
+    （日付が無ければ行末、あれば日付の直後。すでに付いていれば足しません）。子の &#11088; が無くなれば外します。
+    子タスクは字下げ（半角スペース・全角スペース・タブ）で判定し、TODO 一覧にも階層つきで表示します。
+  </div>
+  <div class="note">
     <b>自動保存</b>：ファイルを開いていれば、入力が止まって 3 秒後（打ち続けても 30 秒に 1 回）に
     そのファイルへ静かに上書きします。ダイアログは出ません。
     右下の「自動保存」をクリックすると切り替えられます。<br>
@@ -398,7 +404,7 @@ let matches = [], curMatch = -1;
 let collapsed = new Set(), maxLevel = 6;
 let fileHandle = null, fileName = "untitled.md";
 let dirty = false, eol = "\n", enc = "UTF-8", hasBOM = false;
-let curHead = -1, task = { todo: 0, done: 0 }, tasks = [];
+let curHead = -1, task = { todo: 0, done: 0 }, tasks = [], taskRows = [];
 
 const LS = {
   get(k, d){ try{ const v = localStorage.getItem("memo." + k); return v === null ? d : JSON.parse(v);}catch(e){ return d; } },
@@ -538,7 +544,7 @@ function segHTML(l, from, to, segs){
   }
   return s + esc(l.slice(pos, to));
 }
-const doneRe = /^[ \t　]*(?:✅|☑|(?:[-*+]|\d+[.)])[ \t]+\[[xX]\])/;
+const doneRe = /^[ \t　]*(?:[-*+]|\d+[.)])[ \t]+\[[xX]\]/;
 function lineClass(l){
   if (/^ {0,3}#{1,6}([ \t　]|$)/.test(l)) return " hd";
   if (doneRe.test(l)) return " tk";   /* 見た目は付けない。コード行と誤判定させないための印 */
@@ -574,28 +580,50 @@ function renderMirror(){
 }
 
 /* ================= status / title ================= */
-/* 未完了タスクを集めつつ、完了数も同じ 1 パスで数える。
-   コードブロック内は対象外。直前の見出しを見出しごとの区切りに使う。 */
-const TASK_RE = /^[ \t　]*(?:(?:[-*+]|\d+[.)])[ \t]+\[([ xX])\][ \t]*|([□✅☑])[ \t]*)(.*)$/;
-function buildTasks(){
-  tasks = [];
-  let done = 0, fence = null, head = "";
-  for (let i = 0; i < lines.length; i++){
-    const l = lines[i];
+/* タスクの親子関係を組み立てる（コードブロック内は対象外）。
+   字下げの幅（タブ 4 / 全角空白 2 / 半角 1）で入れ子を判定し、見出しと、
+   字下げが同じか浅いタスク以外の行（地の文・ただの箇条書き）で親子が切れる。 */
+const TASK_RE = /^[ \t　]*(?:[-*+]|\d+[.)])[ \t]+\[([ xX])\][ \t]*(.*)$/;
+function taskTree(L){
+  const nodes = [];
+  let fence = null, head = "", stack = [];
+  for (let i = 0; i < L.length; i++){
+    const l = L[i];
     const fm = l.match(/^\s{0,3}(`{3,}|~{3,})/);
     if (fm){
       if (!fence) fence = fm[1][0];
       else if (l.trimStart()[0] === fence) fence = null;
       continue;
     }
-    if (fence) continue;
+    if (fence || !l.trim()) continue;
     const hm = l.match(/^ {0,3}#{1,6}[ \t　]+(.*)$/);
-    if (hm){ head = hm[1].replace(/[ \t　]+#+[ \t　]*$/, "").trim(); continue; }
+    if (hm){ head = hm[1].replace(/[ \t　]+#+[ \t　]*$/, "").trim(); stack = []; continue; }
+    const ind = indentWidth(l.match(/^[ \t　]*/)[0]);
+    while (stack.length && stack[stack.length - 1].ind >= ind) stack.pop();
     const m = l.match(TASK_RE);
     if (!m) continue;
-    if (m[1] ? m[1] !== " " : m[2] !== "□"){ done++; continue; }
-    if (m[3].trim()) tasks.push({ line: i, text: m[3].trim(), head: head });
+    const par = stack.length ? stack[stack.length - 1] : null;
+    const n = { line: i, ind: ind, open: m[1] === " ", text: m[2].trim(), head: head, parent: par, depth: stack.length, kids: [] };
+    if (par) par.kids.push(n);
+    nodes.push(n); stack.push(n);
   }
+  return nodes;
+}
+/* 未完了タスクを集めつつ、完了数も数える。サイドバーには未完了タスクと、
+   その祖先（完了済みでも階層が分かるよう薄く出す）を文書の順に並べる。 */
+function buildTasks(){
+  tasks = []; taskRows = [];
+  let done = 0;
+  const show = new Set();
+  for (const n of taskTree(lines)){
+    if (!n.open){ done++; continue; }
+    if (!n.text) continue;
+    tasks.push(n);
+    for (let p = n.parent; p && !show.has(p); p = p.parent) show.add(p);
+    show.add(n);
+  }
+  for (const n of show) taskRows.push(n);
+  taskRows.sort((a, b) => a.line - b.line);
   task = { todo: tasks.length, done: done };
 }
 function renderTasks(){
@@ -609,7 +637,7 @@ function renderTasks(){
   }
   const frag = document.createDocumentFragment();
   let cur = null;
-  for (const t of tasks){
+  for (const t of taskRows){
     if (t.head !== cur){
       cur = t.head;
       const g = document.createElement("div");
@@ -619,13 +647,14 @@ function renderTasks(){
       frag.appendChild(g);
     }
     const el = document.createElement("div");
-    el.className = "ti";
+    el.className = t.open ? "ti" : "ti dn";
     el.dataset.line = t.line;
+    el.style.paddingLeft = (12 + t.depth * 14) + "px";
     el.title = t.text + "  (" + (t.line + 1) + "行目)";
     const c = document.createElement("span");
-    c.className = "tc"; c.textContent = "□";
+    c.className = "tc"; c.textContent = t.open ? "□" : "✓";
     const x = document.createElement("span");
-    x.className = "tx"; x.textContent = t.text;
+    x.className = "tx"; x.textContent = t.text || "…";
     el.appendChild(c); el.appendChild(x);
     frag.appendChild(el);
   }
@@ -806,16 +835,14 @@ function inline(s){
        .replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
   return s.replace(/\u0000(\d+)\u0000/g, (m, i) => keep[+i]);
 }
-/* 箇条書き 1 行を解釈する（□ / ✅ 記法も項目として扱う） */
+/* 箇条書き 1 行を解釈する */
 function parseItem(l){
-  let m = l.match(/^([ \t　]*)([-*+]|\d+[.)])[ \t]+(.*)$/);
+  const m = l.match(/^([ \t　]*)([-*+]|\d+[.)])[ \t]+(.*)$/);
   if (m){
     const c = m[3].match(/^\[([ xX])\][ \t]*(.*)$/);
     return { ind: indentWidth(m[1]), ordered: /\d/.test(m[2]),
              checked: c ? c[1] !== " " : null, text: c ? c[2] : m[3] };
   }
-  m = l.match(/^([ \t　]*)([□✅☑])[ \t]*(.*)$/);
-  if (m) return { ind: indentWidth(m[1]), ordered: false, checked: m[2] !== "□", text: m[3] };
   return null;
 }
 function indentWidth(s){
@@ -1045,72 +1072,102 @@ function insertNow(kind){
   if (!editorTarget()) return;
   // 日付の後ろは続けて打てるよう半角スペースを 1 つ空ける
   replaceRange(ed.selectionStart, ed.selectionEnd, nowStr(kind) + (kind === "date" ? " " : ""));
-  if (kind !== "time") starFixLine();
+  if (kind !== "time") taskFix();
 }
 
 /* ================= 今週のタスクに ⭐ =================
    日曜はじまりで今週の土曜までの日付（期限切れも含む）が入った未完了タスクの、
    日付の直後に ⭐ を付ける。日付を書き換えたり完了にしたりして対象外になったら、
-   日付の直後の ⭐ だけを外す（行内のほかの場所の ⭐ には触らない）。 */
+   日付の直後の ⭐ だけを外す（行内のほかの場所の ⭐ には触らない）。
+   ルートの親タスクは、未完了の子孫タスクのどれかに ⭐ があれば同じく ⭐ を付ける。
+   日付があれば日付の直後、無ければ行末に付ける（すでに ⭐ があれば足さない）。 */
 const STAR = "⭐";
-const ANY_TASK = /^[ \t　]*(?:(?:[-*+]|\d+[.)])[ \t]+\[([ xX])\]|([□✅☑]))/;
 const TASK_DATE = /(?<!\d)(\d{4})([\/-])(\d{1,2})\2(\d{1,2})(?!\d)(?:[ T]\d{1,2}:\d{2}(?!\d))?/;
-const STAR_AFTER = /^[ \t]*⭐\uFE0F?/;
+const STAR_AFTER = /^[ \t]*⭐️?/;
+const STAR_END = /[ \t]*⭐️?[ \t]*$/;
 function weekEnd(){
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6 - d.getDay());
 }
-/* 1 行に必要な修正 { at, del, ins }（行内の位置）。直す必要がなければ null */
-function starEdit(l, end){
-  const t = l.match(ANY_TASK);
+/* 1 行に必要な修正 { at, del, ins }（行内の位置）。直す必要がなければ null。
+   kid は子孫の ⭐ の有無（ルートの親タスク以外では undefined） */
+function starEdit(l, end, kid){
+  const t = l.match(TASK_RE);
   if (!t) return null;
+  const open = t[1] === " ";
   const m = l.match(TASK_DATE);
-  if (!m) return null;
+  if (!m){
+    if (kid === undefined) return null;   // ルートの親以外の行末の ⭐ は手書きとみなして触らない
+    const has = l.match(STAR_END), want = open && kid;
+    if (want && !has){
+      const at = l.replace(/[ \t]+$/, "").length;
+      return { at: at, del: l.length - at, ins: " " + STAR };
+    }
+    if (!want && has) return { at: has.index, del: has[0].length, ins: "" };
+    return null;
+  }
   const mo = +m[3] - 1, da = +m[4], d = new Date(+m[1], mo, da);
-  const open = t[1] === " " || t[2] === "□";
-  const want = open && d.getMonth() === mo && d.getDate() === da && d <= end;
+  const want = open && (kid || d.getMonth() === mo && d.getDate() === da && d <= end);
   const at = m.index + m[0].length, has = l.slice(at).match(STAR_AFTER);
   if (want && !has) return { at: at, del: 0, ins: " " + STAR };
   if (!want && has) return { at: at, del: has[0].length, ins: "" };
   return null;
 }
-function starLine(l, end){
-  const x = starEdit(l, end);
+function starLine(l, end, kid){
+  const x = starEdit(l, end, kid);
   return x ? l.slice(0, x.at) + x.ins + l.slice(x.at + x.del) : l;
 }
-/* 文書全体を直す（コードブロック内は対象外）。直した件数を返す */
-function starText(t){
-  const end = weekEnd(), L = t.split("\n");
-  let n = 0, fence = null;
-  for (let i = 0; i < L.length; i++){
-    const fm = L[i].match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (fm){
-      if (!fence) fence = fm[1][0];
-      else if (L[i].trimStart()[0] === fence) fence = null;
-      continue;
-    }
-    if (fence) continue;
-    const s = starLine(L[i], end);
-    if (s !== L[i]){ L[i] = s; n++; }
+/* 直すべき行の一覧 [{ i, s }]（行番号の昇順）。子孫を先に直すため後ろから処理する */
+function fixLines(L){
+  const end = weekEnd(), nodes = taskTree(L), nl = new Map(), out = [];
+  const starred = n => n.kids.some(c => c.open && nl.get(c).includes(STAR) || starred(c));
+  for (let k = nodes.length - 1; k >= 0; k--){
+    const n = nodes[k];
+    const kid = !n.parent && n.kids.length ? starred(n) : undefined;
+    nl.set(n, starLine(L[n.line], end, kid));
   }
-  return { text: L.join("\n"), n: n };
+  for (const n of nodes) if (nl.get(n) !== L[n.line]) out.push({ i: n.line, s: nl.get(n) });
+  return out;
 }
-/* 指定した行を直す（キャレットとスクロール位置は保つ）。省略時はカーソル行 */
-function starFixLine(li){
+/* 文書全体を直す。直した行数を返す */
+function starText(t){
+  const L = t.split("\n"), fx = fixLines(L);
+  for (const x of fx) L[x.i] = x.s;
+  return { text: L.join("\n"), n: fx.length };
+}
+/* 書き換えた行の中で、キャレットを元の文字の位置に追従させる */
+function mapCol(o, n, c){
+  let q = 0;
+  while (q < o.length && q < n.length && o[o.length - 1 - q] === n[n.length - 1 - q]) q++;
+  let p = 0;
+  while (p < o.length - q && p < n.length - q && o[p] === n[p]) p++;
+  if (c <= p) return c;
+  if (c >= o.length - q) return c + n.length - o.length;
+  return n.length - q;
+}
+/* エディタ上の文書を直す（キャレットとスクロール位置は保ち、元に戻すは 1 回で済むようにする） */
+function taskFix(){
   syncDoc();
-  if (li === undefined) li = lineOf(ed.selectionStart);
-  if (li < 0 || li >= lines.length) return;
-  const x = starEdit(lines[li], weekEnd());
-  if (!x) return;
-  const pos = starts[li] + x.at, d = x.ins.length - x.del;
-  const s = ed.selectionStart, e2 = ed.selectionEnd, top = ed.scrollTop;
-  const mv = p => p > pos ? Math.max(pos, p + d) : p;
-  replaceRange(pos, pos + x.del, x.ins);
-  ed.setSelectionRange(mv(s), mv(e2));
+  const fx = fixLines(lines);
+  if (!fx.length) return 0;
+  const nw = new Map(fx.map(x => [x.i, x.s]));
+  const mv = p => {
+    const li = lineOf(p);
+    let d = 0;
+    for (const x of fx) if (x.i < li) d += x.s.length - lines[x.i].length;
+    const c = p - starts[li];
+    return starts[li] + d + (nw.has(li) ? mapCol(lines[li], nw.get(li), c) : c);
+  };
+  const a = fx[0].i, b = fx[fx.length - 1].i;
+  const block = lines.slice(a, b + 1).map((l, k) => nw.has(a + k) ? nw.get(a + k) : l).join("\n");
+  const s = mv(ed.selectionStart), e2 = mv(ed.selectionEnd), top = ed.scrollTop;
+  replaceRange(starts[a], starts[b] + lines[b].length, block);
+  ed.setSelectionRange(s, e2);
   ed.scrollTop = top;
   syncDoc();
+  return fx.length;
 }
-/* カーソルが別の行へ移ったら、離れた行を直す（書き換えている最中の行には触らない） */
+/* カーソルが別の行へ移ったら文書を直す（書き換えている最中の行を途中で直さないため） */
 let starPrev = -1;
 function starOnMove(){
   if (ed.selectionStart !== ed.selectionEnd) return;   // 範囲選択中は何もしない
@@ -1120,9 +1177,7 @@ function starOnMove(){
   const prev = starPrev;
   starPrev = cur;
   if (prev < 0 || prev > v.length) return;
-  syncDoc();
-  const li = lineOf(prev);
-  if (li !== lineOf(p)) starFixLine(li);
+  taskFix();
   starPrev = ed.value.lastIndexOf("\n", ed.selectionStart - 1) + 1;
 }
 /* 開いたファイルを直す。変更があれば未保存扱いにして自動保存に任せる */
@@ -1159,7 +1214,7 @@ function setDateAt(t, d){
   replaceRange(t.from, t.to, str);
   const p = s > t.to ? s + delta : Math.min(s, t.from + str.length);
   ed.setSelectionRange(p, p);
-  starFixLine();
+  taskFix();
 }
 /* Ctrl+←/→ (∓1 日) / Ctrl+↑/↓ (∓1 週間) : カーソル行の日付をずらす。日付が無い行では何もしない */
 function shiftDate(days){
@@ -1189,7 +1244,7 @@ function pickDate(){
     const [yy, mm, dd] = inp.value.split("-").map(Number), nd = new Date(yy, mm - 1, dd);
     ed.focus(); ed.scrollTop = top;
     if (t){ ed.setSelectionRange(s, e2); setDateAt(t, nd); }
-    else { replaceRange(s, e2, fmtDate(nd, "/") + " "); starFixLine(); }
+    else { replaceRange(s, e2, fmtDate(nd, "/") + " "); taskFix(); }
   };
   try{ inp.showPicker(); }catch(err){ toast("カレンダーを開けませんでした"); }
 }
@@ -1213,11 +1268,10 @@ const INDENT = "  ";                       // 1 レベル = 半角 2 つ
 const OUTDENT = /^(\t|　| {1,2})/;         // 戻すときは タブ / 全角空白 / 半角 1〜2 個
 /* 行頭が箇条書き記号なら、キャレット位置に関係なく行ごとレベル変更する */
 function isListLine(l){
-  return /^[ \t　]*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(l) || /^[ \t　]*[□✅☑]/.test(l);
+  return /^[ \t　]*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(l);
 }
 
 /* ================= チェックボックス ================= */
-const BOX_TODO = "□", BOX_DONE = "✅";
 /* 1 行を なし → [ ] → [x] → なし と巡回させる */
 function cycleLine(l, allowEmpty){
   const m = l.match(/^([ \t　]*)([\s\S]*)$/);
@@ -1228,10 +1282,7 @@ function cycleLine(l, allowEmpty){
     if (md[3] === " ") return ind + body.replace(/\[[ xX]\]/, "[x]");
     return ind + md[1] + md[2] + body.slice(md[0].length);
   }
-  // 2) 既存ファイルの □ / ✅ 記法もそのまま扱える
-  if (body.startsWith(BOX_TODO)) return ind + BOX_DONE + body.slice(BOX_TODO.length);
-  if (body.startsWith(BOX_DONE)) return ind + body.slice(BOX_DONE.length);
-  // 3) 箇条書きなら記号の後ろにチェックを足す
+  // 2) 箇条書きなら記号の後ろにチェックを足す
   const li = body.match(/^([-*+]|\d+[.)])[ \t]+/);
   if (li) return ind + li[0] + "[ ] " + body.slice(li[0].length);
   if (!body.trim() && !allowEmpty) return l;      // 複数行選択時、空行は触らない
@@ -1245,21 +1296,18 @@ function toggleCheck(){
   const from = starts[a], to = starts[b] + lines[b].length;
   const src = ed.value.slice(from, to);
   const one = a === b;
-  const end = weekEnd();
-  const block = src.split("\n")
-    .map(l => one ? cycleLine(l, one) : starLine(cycleLine(l, one), end)).join("\n");
+  const block = src.split("\n").map(l => cycleLine(l, one)).join("\n");
   if (block === src) return;
   replaceRange(from, to, block);
   if (one){
     const p = Math.max(from, Math.min(from + block.length, s + block.length - src.length));
     ed.setSelectionRange(p, p);
-    starFixLine();                     // 1 行のときはキャレットを保ったまま ⭐ を直す
   } else ed.setSelectionRange(from, from + block.length);
+  taskFix();                       // ⭐ を直す（親タスクも）
 }
-/* □ / ✅ をダブルクリックしたらその 1 文字だけ切り替える */
+/* [ ] / [x] の中身をダブルクリックしたらその 1 文字だけ切り替える */
 function toggleCharAt(i){
-  const c = ed.value[i];
-  const to = c === BOX_TODO ? BOX_DONE : c === BOX_DONE ? BOX_TODO : c === " " ? "x" : " ";
+  const to = ed.value[i] === " " ? "x" : " ";
   const p = ed.selectionStart;
   replaceRange(i, i + 1, to);
   ed.setSelectionRange(p, p);
@@ -1339,7 +1387,7 @@ async function loadFile(file, handle){
   bkDel();
   announceOpened(fileHandle);
   const n = starOpened();
-  toast("開きました: " + file.name + (n ? "（" + STAR + " を " + n + " 件更新）" : ""));
+  toast("開きました: " + file.name + (n ? "（タスクの " + STAR + "・日付を " + n + " 行更新）" : ""));
 }
 async function loadHandle(h){
   if (h.queryPermission){
@@ -1760,17 +1808,13 @@ ed.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && ed.selectionStart === ed.selectionEnd){
     const li = lineOf(ed.selectionStart);
     const cur = lines[li] || "";
-    const m = cur.match(
-      new RegExp("^([ \\t　]*)(?:([-*+]|\\d+[.)])[ \\t]+(?:\\[[ xX]\\][ \\t]+)?|([" +
-                 BOX_TODO + BOX_DONE + "]))?"));
+    const m = cur.match(/^([ \t　]*)(?:([-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)?/);
     // 行頭（記号より前）での Enter は素の改行にする（記号を二重に付けない）
-    if (m && (m[1] || m[2] || m[3]) && ed.selectionStart - starts[li] >= m[0].length){
+    if (m && (m[1] || m[2]) && ed.selectionStart - starts[li] >= m[0].length){
       let pre = m[1];
       if (m[2]){
         const box = /^([-*+]|\d+[.)])[ \t]+\[[ xX]\]/.test(cur.slice(m[1].length)) ? "[ ] " : "";
         pre += (/^\d/.test(m[2]) ? (parseInt(m[2], 10) + 1) + m[2].slice(-1) : m[2]) + " " + box;
-      } else if (m[3]){
-        pre += BOX_TODO;                     // ✅ の次の行も未完了の □ で始める
       }
       if (pre){ e.preventDefault(); replaceRange(ed.selectionStart, ed.selectionEnd, "\n" + pre); }
     }
@@ -1780,12 +1824,9 @@ ed.addEventListener("keydown", e => {
 /* チェック欄をダブルクリック → 切り替え（それ以外の語は通常どおり選択） */
 ed.addEventListener("dblclick", () => {
   const v = ed.value, p = ed.selectionStart;
-  for (const i of [p, p - 1]){
-    if (v[i] === BOX_TODO || v[i] === BOX_DONE){ toggleCharAt(i); starFixLine(); return; }
-  }
   for (let i = p - 2; i <= p + 1; i++){          // [ ] / [x] の中身を探す
     if (v[i] === "[" && v[i + 2] === "]" && /^[ xX]$/.test(v[i + 1] || "")){
-      toggleCharAt(i + 1); starFixLine(); return;
+      toggleCharAt(i + 1); taskFix(); return;
     }
   }
 });
